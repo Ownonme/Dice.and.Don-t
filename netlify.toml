@@ -1,0 +1,14 @@
+[build]
+  # Installa dipendenze e builda con Vite
+  command = "npm ci && npm run build"
+  # Output di Vite
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Impostazioni opzionali (consigliate se usi SPA routing)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

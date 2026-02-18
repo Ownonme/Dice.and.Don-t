@@ -1,0 +1,103 @@
+id,term,definition,category,description,examples,related_terms,created_by,created_at,updated_at,image_url,section_id,sort_order
+46f1213b-0b25-4346-9696-3096df695721,Funzionamento della struttura dadi.,"Spiegazione del sito Dice & Don't, sezione dadi.",Dadi,"Dentro la sezione dadi troviamo diverse categorie.
+-Selezione personaggio: necessario per eseguire i tiri di dado, potrai scegliere tra i personaggi che hai creato.
+-Anomalie di status: mostrerà anomalie di stato già presenti e sarà possibile inserirne di nuove.
+-Specifiche personaggio: qui verranno mostrate le statistiche dei personaggi, sia quelle base che quelle totali. All'interno ci sono anche: Salute, armatura e Punti azione, questi potranno essere modificati tramite modifica diretta. NOTA IMPORTANTE: I danni subiti ed i punti azione usati dovrai modificarli direttamente tu.
+-Tipo di dado: qui ci saranno diverse possibilità di tiro di dado.
+ 1) Azione: Questo tiro sarà basato sul livello del personaggio e prenderà come valore puro le statistiche totali del personaggio, serve per determinare la riuscita delle azioni
+ 2) Danno: Questo dado legge l'equipaggiamento, le magie e le abilità. il calcolo spesso avviene con i seguenti calcoli: Danno base (assicurato) + Danno aggiuntivo (potenziale) + Anime (assicurato) + competenze (variabile, ma sempre potenziale).
+ 3) Danno critico:  Affinchè si presenti questa occasione, il tiro azioni deve superare il massimo potenziale del dado del livello più alto. (Esempio: due livelli 2 tireranno un dado a quaranta facce quindi dovrà essere superiore a quaranta, se il nemico sarà livello 3 dovrai fare cinquanta come risultato per essere considerato critico) Esattamente come il danno mostrato in precedenza, tuttavia ogni danno è considerato assicurato + un ulteriore danno bonus considerato: ""Danno puro critico""
+Dentro la casella della tipologia del dado è presente un icona, lì dentro (se avrai selezionato un personaggio) verranno mostrate le abilità e le magie del personaggio selezionato, (Eventualmente potrai tirare anche da lì)
+-Postura: la sezione postura serve a determinare la tecnica di combattimento che vorrai usare (Vedi glossario, voce:  ""Posture"")
+Dovrai manualmente inserire la postura per cambiarla mid-fight e comunicarlo al narratore.
+-Lancia dado: serve per completare il tiro di dado
+-Cerca oggetto: usando il display inventario di fianco, verranno mostrati gli oggetti presenti dentro l'inventario e potrai usarlo (es. una pozione o un altro oggetto) dovrai però modificare manualmente cosa la pozione andrà a a fare.
+-Oggetti raccolti: dentro questa pagina vedrai gli oggetti raccolti in seguito ad un combattimento, potrai scegliere se equipaggiarlo o metterlo dentro l'inventario, dovrai selezionare il tuo personaggio per fare in modo che l'oggetto raccolto entri dentro l'inventario.
+-Gestione personaggi: permette di vedere i personaggi e la loro situazione per assicurarti che i tuoi compagni stiano bene.
+-Lista nemici: esattamente come per la gestione personaggi, vedrai i nemici e la loro situazione attuale, comprese le loro armi.
+-Storico tiri: qui vedrai i tiri eseguiti di tutti i giocatori, premendo il tasto refresh aggiornerai eventuali dati rimasti indietro.
+Tutta la sezione sotto è momentanea, non è quindi da considerarsi.",,"[""Sito"",""Dadi""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-09-12 00:42:39.581096+00,2025-09-13 13:36:21.194977+00,,e098f259-7dc0-4e4a-a538-d591029b6fc2,1
+545f38b3-36f8-4a76-8da6-f9d9f13a7d18,Introduzione alle posture,Una breve introduzione alle posture ed alle posture metafisiche.,Posture,"Le posture di combattimento sono una parte del combattimento tecnico che permettono di sfruttare ogni situazione o crearne di nuove all'interno dello scontro.
+Ogni postura ha i suoi vantaggi ed i suoi svantaggi, delle armi richieste specifiche o meno.
+L'utilizzo delle posture sono assolutamente opzionali, tuttavia sono altamente consigliate per chi presta molta attenzione al combattimento.
+Al livello 5 dell'abilità ""Tecnico"" si sblocca un abilità che permette di cambiare posture in ogni momento, altrimenti, il cambio postura può essere attivata solo al termine della propria azione.
+Ci sono altri modi per interrompere involontariamente una postura:
+-Manovre
+-Amputazioni
+-Contraccolpi da magie
+-Regole della postura",,"[""Combattimento tecnico"",""Posture""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-09-10 00:56:18.069222+00,2025-10-08 23:41:24.257113+00,,76f531a8-1743-40d7-b68f-b4da62a150f0,0
+7b800b78-dc08-4fde-bd2b-02ba69466f08,Statistiche,Spiegazione breve sulle statistiche,Statistiche,"Le statistiche sono una parte fondamentale della storia poiché influenzano pesantemente la riuscita delle azioni; che siano di combattimento o generali è meglio averle alte.
+
+Salire di livello, equipaggiare equipaggiamento aumenta le statistiche. Tuttavia ci sono anche casi in cui delle statistiche vengono ridotte.
+Forza(F): Influisce sulla probabilità di riuscita degli attacchi basati sulle armi da mischia comuni, pesanti, da lancio, attacchi fisici in generale e determina in parte il danno a mani nude. 
+Viene utilizzata anche per parare, deviare e contrattaccare. 
+
+Percezione(P): Influisce sulla probabilità di successo sulle azioni relative alle armi da fuoco o distanza.
+Influisce anche sulla scoperta, saccheggio, abilità di osservazione e a scovare menzogne.
+
+Resistenza(R): influisce sul carico trasportabile ed Equipaggiato senza portare malus.
+Aumenta di 2 la salute massima. 
+Aumenta la probabilità di resistere ad alcuni status negativi. (vedi anomalie di stato). 
+
+Intelletto(I) :
+Influisce sulla probabilità di lanciare incantesimi potenti e ne determina in minor parte il danno.
+Influisce sulla riuscita di azioni logiche, risoluzione di problemi e creazione. 
+
+Agilità(A): influisce sulla probabilità di riuscita delle azioni basate sull'utilizzo di armi leggere e veloci.
+Influsice l'abilità di schivare, contrattaccare e deviare.
+Aumenta le probabilità di Furtività e assassinio, ma anche la capacità di movimento. 
+
+Sapienza(Z): Influenza la riuscita di tutte le magie.
+Ogni due punti aumenta di 1 i punti azione massimi.
+
+Anima(S): Aumenta di 1 i punti azione massimi ed i danni inflitti massimali generici.",,"[""Personaggio"",""dadi"",""statistiche""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-09-12 13:12:21.024512+00,2025-09-13 13:36:21.194977+00,,e098f259-7dc0-4e4a-a538-d591029b6fc2,2
+8e2ff31d-115e-4631-ac9f-ca20d6f21426,Tiri di dado,Il tiro dei dadi è fondamentale per eseguire azioni di qualsiasi tipo.,Regolamento,"Le azioni specifiche richiedono un tiro di dado basato sul proprio livello.
+I dialoghi non richiedono alcun tiro di riuscita in quanto sta unicamente al giocatore saper trovare le parole più adatte, alcune situazioni non le salva neanche una dialettica eccellente; non implica che comunque vale la pena provare a volte.
+Ecco invece cosa richiede il dado per il tiro di riuscita:
+-Azioni di combattimento, danni ed alterazioni di stato. 
+-Creazione oggetti/pozioni/cerchi alchemici. 
+-Ricerca di oggetti, trovare qualcosa.
+-Resistenza ad alterazioni di stato. 
+-Ed alcuni tiri situazionali
+
+Ogni tiro (o la maggior parte) hanno dei modificatori che possono essere dati dalle statistiche (Vedi statistiche), danni (vedi danni) o anche di competenze (vedi competenze). 
+
+Il tiro dei dadi è variabile da situazione a situazione; tuttavia alcune situazioni lo fanno essere stabile. Vediamo alcuni esempi.
+
+Per i tiri basati sulla percentuale basterà seguire questa procedura:
+(Es) 20%=/d100 se il risultato è minore di 80 il tiro fallisce.
+(Es) 33%=/d100 se il risultato è minore di 66 fallisce.
+
+I livelli dei personaggi e dei nemici saranno variabili, tuttavia i giocatori tireranno con il loro dado, i nemici il loro. 
+Esempio:
+Su 30 un 28 può colpire un nemico di livello 1, non un livello 6
+A prescindere si utilizzerà sempre il dado del giocatore. 
+La stessa cosa avviene se si esegue un attacco ad area e nella zona è coinvolto un nemici di di livello superiore agli altri. 
+Il dado a livelli segue queste regole:
+Livello 1: dado a 30 facce
+Livello 2: dado a 40 facce
+Livello 3: dado a 50 facce
+Livello 4: dado a 60 facce
+Livello 5: dado a 70 facce
+Livello 6: dado a 80 facce
+Livello 7: dado a 100 facce
+Livello 8: dado a 120 facce
+Livello 9: dado a 140 facce
+Livello 10: dado a 160 facce
+Livello 11: dado a 180 facce
+Livello 12: dado a 200 facce
+Livello 13: dado a 220 facce
+Livello 14: dado a 240 facce
+Livello 15: dado a 260 facce
+Livello 16: dado a 290 facce
+Livello 17: dado a 320 facce
+Livello 18: dado a 350 facce
+Livello 19: dado a 380 facce
+Livello 20: dado a 400 facce
+
+I giocatori si fermano al livello 20, ma alcuni nemici possono sforzarlo, anche di molto.",Sistema dadi,"[""Dadi""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-09-11 19:41:43.760789+00,2025-09-13 13:36:21.194977+00,https://hhremqteoxliqkocxfvk.supabase.co/storage/v1/object/public/images/glossary/glossary-1757637645801.png,e098f259-7dc0-4e4a-a538-d591029b6fc2,0
+decc9999-0282-4785-aa00-71dedc438bfb,Postura del matto,"Spiegazione, utilizzo e regole della postura del matto",Posture,"Arma sulla spalla con lama in direzione opposta all'avversario e rivolta con la punta verso l'alto, la mano libera se presente deve essere mobil, tendenzialmente rivolta in avanti. 
+
+Postura versatile volta al cambio postura.
+Offre vantaggio alla prima azione non letale. 
+In seguito all'azione c'è bisogno di effettuare un cambio postura altrimenti verrà considerata una postura classica senza malus o bonus",,"[""Combattimento tecnico"",""posture""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-09-10 15:12:46.93524+00,2025-10-08 23:41:24.327996+00,https://hhremqteoxliqkocxfvk.supabase.co/storage/v1/object/public/images/glossary/glossary-1757517187335.png,76f531a8-1743-40d7-b68f-b4da62a150f0,1

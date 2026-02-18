@@ -1,0 +1,5 @@
+id,name,type,subtype,description,armor,stats,weight,damage,effect,user_id,collected_by,created_at,updated_at
+10af8e88-acab-452e-a504-6c08b50cd28e,Elmo a becco di corvo in acciaio nero madre,armatura,testa,"Vantaggio ad evitare danno freccia in testa
+svantaggio ad azioni di lancio",80,"{""anima"":0,""forza"":0,""agilita"":0,""sapienza"":0,""intelletto"":0,""percezione"":0,""resistenza"":4}",0,{},,479ab18e-0df5-418a-86fd-6ffc4791250a,,2025-10-21 21:54:01.56663+00,2025-10-21 21:54:01.56663+00
+679fde0f-6774-4672-9cb5-6aab024b1c28,Armatura media in acciaio nero AQ,armatura,armatura,,128,"{""anima"":0,""forza"":0,""agilita"":10,""sapienza"":5,""intelletto"":0,""percezione"":0,""resistenza"":10}",0,{},,479ab18e-0df5-418a-86fd-6ffc4791250a,,2025-10-21 21:52:50.620533+00,2025-10-21 21:52:50.620533+00
+71e89000-4dfb-4980-80d7-a5bd442f1ec5,Corazza media da cavalleria in acciaio nero madre,armatura,armatura,,173,"{""anima"":0,""forza"":5,""agilita"":5,""sapienza"":5,""intelletto"":0,""percezione"":5,""resistenza"":8}",6,{},,479ab18e-0df5-418a-86fd-6ffc4791250a,,2025-10-21 21:41:23.896269+00,2025-10-21 21:41:23.896269+00

@@ -1,0 +1,7 @@
+tunnel: 742ab960-3109-4186-a367-2b92fb79cb3f
+credentials-file: C:\Users\Alessandro\.cloudflared\742ab960-3109-4186-a367-2b92fb79cb3f.json
+
+ingress:
+  - hostname: api.diceanddont.uk
+    service: http://localhost:4000
+  - service: http_status:404

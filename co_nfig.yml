@@ -1,0 +1,9 @@
+{}
+tunnel: dndontbe
+credentials-file: C:\Users\Alessandro\.cloudflared\b406872c-1115-4076-88ae-b6acb9cc2a06.json
+
+ingress:
+  - hostname: api.diceanddont.com
+    service: http://localhost:4000
+  - service: http_status:404
+

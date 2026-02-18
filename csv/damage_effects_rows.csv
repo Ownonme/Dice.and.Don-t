@@ -1,0 +1,38 @@
+id,name,description,affects_action_points,affects_health,affects_armor,affects_classic_damage,bonus_effects,created_by,created_at,updated_at
+05a34529-f61d-481a-b8ad-f98e23b709d1,Neo-Arcano enzoiano,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-29 22:26:07.214552+00,2025-10-29 22:26:07.214552+00
+091dac7d-10df-4a7e-aeb9-90cb3481d0e9,Vento,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-29 22:13:04.821434+00,2025-10-29 22:13:04.821434+00
+1ac4aebc-1d1b-48df-84c1-b2be366edb13,Arcano puro,,false,false,false,true,"[""+100% danni contro armatura""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-12-01 16:16:52.90594+00,2025-12-01 16:16:52.90594+00
+24d2b347-f4f3-438b-b028-00ce561b5078,Taglio,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 12:38:23.515331+00,2025-10-30 12:38:23.515331+00
+2ecb16ed-b74a-444f-a3b0-8eb50e0f56f9,Sangue magico,,false,false,false,true,"[""+10% danni contro salute""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:39:10.033427+00,2025-10-30 00:39:10.033427+00
+2fa46f36-7fa6-46a7-afd5-b20e5b740f2f,Neo-arcano Severo,,false,true,true,false,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:25:02.273499+00,2025-10-30 00:25:02.273499+00
+30e2ae5a-3ad6-486a-b6ca-80cf0ddfd200,Gravità,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:41:22.65767+00,2025-10-30 00:41:22.65767+00
+3186c074-6847-44eb-91cc-755f3d3f9aa2,Ossa/Impatto,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:42:16.324492+00,2025-10-30 00:42:16.324492+00
+3c5f15ea-0a3f-4dd5-9ded-547f6af8c824,Arcano Ehnai,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 23:31:42.867791+00,2025-10-30 23:31:42.867791+00
+3cb7c8c0-f22d-465c-8097-a8343427aefd,Neo-arcano del Lume,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-29 22:27:50.7489+00,2025-10-29 22:27:50.7489+00
+4026c38c-3be2-4a9f-92d6-f5e4b41af9a9,Arcano riverso,,false,true,false,false,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 23:34:28.035238+00,2025-10-30 23:34:28.035238+00
+45d7d4dc-4560-4971-823f-90843908c1ac,Neo-arcano invertito,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:23:49.604272+00,2025-10-30 00:23:49.604272+00
+4847c6fd-2a2a-47aa-8326-c800a80b8bb7,Cura divina,,false,true,false,false,"[""-200% contro debolezza"",""Ripristina Salute""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:35:12.664793+00,2025-10-30 00:35:12.664793+00
+572bb854-d22a-49a6-8be6-55205131103f,Arcano X,,false,true,true,false,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 23:31:06.249169+00,2025-10-30 23:31:06.249169+00
+5e857e24-e7c8-45b2-9774-7e3f56035ced,Neo-arcano energetico,,true,false,false,false,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-11-30 23:08:48.496331+00,2025-11-30 23:08:48.496331+00
+67b41454-61db-4194-b057-aa5fdeb4de0b,Fuoco,,false,false,false,true,"[""+100% danni doppi contro debolezza""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-29 22:02:02.847765+00,2025-10-29 22:02:02.847765+00
+751c65d0-ddcf-49b6-a40c-8892883ac55b,Cura sanguigna,,false,true,false,false,"[""Ripristina Salute""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:28:25.826286+00,2025-10-30 00:28:25.826286+00
+8a878db3-874d-43ce-980d-4b0f24a9c3d9,Ossa/Taglio,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:42:02.96622+00,2025-10-30 00:42:02.96622+00
+8cd2c4ba-759e-4e63-801e-e58370e2448a,Cura,,false,true,false,false,"[""Ripristina Salute""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:29:36.322722+00,2025-10-30 00:29:36.322722+00
+8dd372c5-553e-4eef-8a1c-502fa647977f,Elettrico,,false,false,false,true,"[""+50% danni contro armatura""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-29 22:07:50.683308+00,2025-10-29 22:07:50.683308+00
+8ff5a892-63b8-4089-8ea7-ab34af8f46c4,Divino,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:33:37.099453+00,2025-10-30 00:33:37.099453+00
+929c3415-3bb8-40c1-99d6-7f324a596c32,Cura Enzoiana,,false,true,false,false,"[""Ripristina Salute""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-11-27 14:39:43.890819+00,2025-11-27 14:39:43.890819+00
+98cbf6a7-f338-4f0c-93f9-6b293e45e324,Lavico,,false,false,false,true,"[""+50% danni contro salute""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-29 22:09:51.011625+00,2025-10-29 22:09:51.011625+00
+a5a637a6-a4f8-476b-810b-79155cf44728,Veleno,,false,false,false,true,"[""-50% danni ad armatura"",""+25% danni contro salute""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:37:58.445667+00,2025-10-30 00:37:58.445667+00
+a96ee946-5299-48d5-8db5-1a9d1d44c7e4,Ombra,,false,false,false,true,"[""+20% danni assassinio""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:26:32.292877+00,2025-10-30 00:26:32.292877+00
+ab1d883d-9240-461d-ba56-257cd67e9c30,Acqua/Taglio,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:40:54.136179+00,2025-10-30 00:40:54.136179+00
+b01b8d41-842b-452c-8cef-e772bcbe4418,Perforante,,false,false,false,true,"[""+33% contro armatura""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 12:38:52.002892+00,2025-10-30 12:38:52.002892+00
+b8e532bf-8759-4506-942c-2f9258dcf794,Ghiaccio,,false,false,false,true,"[""+100% danni doppi contro debolezza""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-29 22:07:06.347447+00,2025-10-29 22:07:06.347447+00
+c736dd25-bf3c-4bb4-8cf6-46cb7e021276,Oro,,false,false,false,true,"[""+75% danni contro salute"",""-25% danni contro armatura""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-29 22:13:55.730695+00,2025-10-29 22:13:55.730695+00
+d370d45d-a3ae-4cff-b178-247ed111b373,Terra,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-29 22:14:48.814869+00,2025-10-29 22:14:48.814869+00
+d9f069a8-ef0f-4aea-a1fb-fa3a4e2cbb54,Neo-arcano di Arghenis,,false,true,false,false,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:36:13.697332+00,2025-10-30 00:36:13.697332+00
+df50a7ce-6aec-4d7f-b9e3-1275622f0629,Impatto,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 12:39:14.174825+00,2025-10-30 12:39:14.174825+00
+e7f08193-7faa-4c51-b956-b8983040e018,Cura sanguigna energetica,,true,false,false,false,"[""Ripristina Punti azione""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:32:09.638818+00,2025-10-30 00:32:09.638818+00
+ee564d0f-159b-444b-af94-14020914e457,Acqua/Impatto,,false,false,false,true,"[""+20% danni ad armatura""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:40:34.485216+00,2025-10-30 00:40:34.485216+00
+f73f2085-4fb4-4c83-b0ed-fd109dee8465,Neo-arcano ponente,,false,false,false,true,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:24:07.490969+00,2025-10-30 00:24:07.490969+00
+ff3990bf-3392-437a-b6c5-086290e4e341,Esplosivo,,false,false,false,true,"[""+100% danni contro armature""]",479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-29 22:09:09.56942+00,2025-10-29 22:09:09.56942+00
+ffd84456-5429-470a-82ee-2e9954725f40,Sangue classico,,false,true,false,false,[],479ab18e-0df5-418a-86fd-6ffc4791250a,2025-10-30 00:27:45.115616+00,2025-10-30 00:27:45.115616+00

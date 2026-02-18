@@ -1,0 +1,4 @@
+id,name,description,icon,color,sort_order,created_by,created_at,updated_at
+5af96a92-c36a-4c81-bd00-65bac362b59b,Bestiario,"Una guida alle creature che abitano il mondo ",📖,#8f1a1a,3,479ab18e-0df5-418a-86fd-6ffc4791250a,2025-09-10 15:16:23.196911+00,2025-09-10 15:16:23.196911+00
+76f531a8-1743-40d7-b68f-b4da62a150f0,Posture,Una guida alle posture ed al loro funzionamento,🗡️,#808085,5,479ab18e-0df5-418a-86fd-6ffc4791250a,2025-09-10 00:40:34.979176+00,2025-09-10 00:40:34.979176+00
+e098f259-7dc0-4e4a-a538-d591029b6fc2,Regole e funzionamento,"Una guida a come funziona il sito, le attuali regole, tips & tricks",🔍,#ffbb00,1,479ab18e-0df5-418a-86fd-6ffc4791250a,2025-09-11 19:25:40.34783+00,2025-09-11 19:25:55.689756+00

@@ -1,0 +1,204 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  /* Tema Dice&Don't (Nero e Oro) */
+  .gold-black {
+    --background: 0 0% 8%; /* Nero profondo */
+    --foreground: 45 100% 70%; /* Oro per il testo principale */
+    --card: 0 0% 12%; /* Nero leggermente più chiaro per le card */
+    --card-foreground: 0 0% 85%; /* Grigio chiaro per il testo delle card */
+    --popover: 0 0% 10%;
+    --popover-foreground: 45 100% 70%;
+    --primary: 45 100% 60%; /* Oro */
+    --primary-foreground: 0 0% 8%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 85%; /* Grigio chiaro invece del bianco */
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 75%; /* Grigio medio-chiaro */
+    --accent: 45 100% 50%;
+    --accent-foreground: 0 0% 8%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 45 50% 25%; /* Oro scuro per i bordi */
+    --input: 0 0% 15%;
+    --ring: 45 100% 60%;
+    --radius: 0.5rem;
+    
+    /* Sidebar con tema Dice&Don't - Grigio chiaro invece del bianco */
+    --sidebar-background: 0 0% 5%; /* Sidebar nero profondo */
+    --sidebar-foreground: 0 0% 85%; /* Testo grigio chiaro */
+    --sidebar-primary: 45 100% 60%; /* Elementi primari oro */
+    --sidebar-primary-foreground: 0 0% 8%; /* Testo su elementi primari nero */
+    --sidebar-accent: 0 0% 12%; /* Accenti nero più chiaro */
+    --sidebar-accent-foreground: 0 0% 85%; /* Testo accenti grigio chiaro */
+    --sidebar-border: 45 30% 20%; /* Bordi oro scuro */
+    --sidebar-ring: 45 100% 60%; /* Ring oro */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Stili aggiuntivi per il tema Dice&Don't */
+  .gold-black {
+    /* Effetto oro sui titoli principali */
+    h1, h2, h3 {
+      background: linear-gradient(135deg, hsl(45 100% 70%), hsl(45 100% 50%));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    h1 *, h2 *, h3 * {
+      -webkit-text-fill-color: currentColor;
+    }
+
+    /* Effetto glow sui bottoni primari */
+    .bg-primary {
+      box-shadow: 0 0 20px hsla(45, 100%, 50%, 0.3);
+    }
+
+    /* Bordi oro sui card */
+    .border {
+      border-color: hsl(45 30% 25%);
+    }
+
+    /* Sidebar con effetti speciali */
+    [data-sidebar="sidebar"] {
+      background: linear-gradient(180deg, hsl(0 0% 5%), hsl(0 0% 8%));
+      border-right: 2px solid hsl(45 100% 60% / 0.3);
+    }
+
+    /* Menu items nella sidebar */
+    [data-sidebar="menu-button"] {
+      transition: all 0.2s ease;
+    }
+
+    [data-sidebar="menu-button"]:hover {
+      background: linear-gradient(135deg, hsl(45 100% 60% / 0.1) 0%, hsl(45 100% 50% / 0.2) 100%) !important;
+      color: hsl(45 100% 80%) !important; /* Oro chiaro al hover */
+      box-shadow: 0 0 15px hsl(45 100% 60% / 0.3);
+      transform: translateX(2px);
+    }
+
+    [data-sidebar="menu-button"][data-active="true"] {
+      background: linear-gradient(135deg, hsl(45 100% 60% / 0.2) 0%, hsl(45 100% 50% / 0.3) 100%) !important;
+      color: hsl(45 100% 90%) !important;
+      border-left: 3px solid hsl(45 100% 60%);
+      box-shadow: 0 0 20px hsl(45 100% 60% / 0.4);
+    }
+
+    /* Scrollbar personalizzata */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: hsl(0 0% 10%);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(135deg, hsl(45 100% 60%) 0%, hsl(45 100% 50%) 100%);
+      border-radius: 4px;
+      box-shadow: 0 0 10px hsl(45 100% 60% / 0.3);
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(135deg, hsl(45 100% 70%) 0%, hsl(45 100% 60%) 100%);
+      box-shadow: 0 0 15px hsl(45 100% 60% / 0.5);
+    }
+
+    /* Effetti aggiuntivi per il tema Dice&Don't */
+    .card {
+      background: linear-gradient(135deg, hsl(0 0% 12%) 0%, hsl(0 0% 15%) 100%);
+      border: 1px solid hsl(45 100% 60% / 0.2);
+      box-shadow: 0 4px 20px hsl(0 0% 0% / 0.3);
+    }
+
+    .button-primary {
+      background: linear-gradient(135deg, hsl(45 100% 60%) 0%, hsl(45 100% 50%) 100%);
+      color: hsl(0 0% 8%);
+      box-shadow: 0 4px 15px hsl(45 100% 60% / 0.3);
+    }
+
+    .button-primary:hover {
+      background: linear-gradient(135deg, hsl(45 100% 70%) 0%, hsl(45 100% 60%) 100%);
+      box-shadow: 0 6px 20px hsl(45 100% 60% / 0.4);
+      transform: translateY(-2px);
+    }
+  }
+}
