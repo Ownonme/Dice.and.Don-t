@@ -26,6 +26,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
-/server/db.json
+-/server/db.json
 /server/uploads/
 start_remote.bat

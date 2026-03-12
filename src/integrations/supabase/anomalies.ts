@@ -31,6 +31,9 @@ export async function createAnomaly(def: AdminAnomalyDefinition) {
     weakness: def.weaknessEnabled ? (def.weakness ?? null) : null,
     pa_discount_enabled: !!def.paDiscountEnabled,
     pa_discount: def.paDiscountEnabled ? (def.paDiscount ?? null) : null,
+    immunity_total: !!def.immunityTotal,
+    immunity_anomalies: Array.isArray(def.immunityAnomalies) ? def.immunityAnomalies : [],
+    immunity_damage_effects: Array.isArray(def.immunityDamageEffects) ? def.immunityDamageEffects : [],
   };
 
   const payload: TablesInsert<'anomalies'> = {
@@ -87,6 +90,9 @@ export async function updateAnomaly(id: string, def: AdminAnomalyDefinition) {
     weakness: def.weaknessEnabled ? (def.weakness ?? null) : null,
     pa_discount_enabled: !!def.paDiscountEnabled,
     pa_discount: def.paDiscountEnabled ? (def.paDiscount ?? null) : null,
+    immunity_total: !!def.immunityTotal,
+    immunity_anomalies: Array.isArray(def.immunityAnomalies) ? def.immunityAnomalies : [],
+    immunity_damage_effects: Array.isArray(def.immunityDamageEffects) ? def.immunityDamageEffects : [],
   };
 
   const payload: TablesUpdate<'anomalies'> = {

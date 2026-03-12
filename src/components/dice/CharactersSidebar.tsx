@@ -24,6 +24,13 @@ const CharactersSidebar: React.FC<CharactersSidebarProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   
+  const toNum = (v: any) => {
+    if (typeof v === 'number') return v;
+    const s = String(v ?? '').trim().replace(',', '.');
+    const m = s.match(/-?\d+(?:\.\d+)?/);
+    return m ? parseFloat(m[0]) : 0;
+  };
+
   const publicOnly = useMemo(() => {
     return characters.filter((c: any) => c?.is_public === true);
   }, [characters]);
@@ -143,7 +150,6 @@ const CharactersSidebar: React.FC<CharactersSidebarProps> = ({
                     }`}
                     onClick={() => {
                       onCharacterSelect(character.id);
-                      onClose();
                     }}
                   >
                     <CardHeader className="pb-2">
@@ -179,20 +185,16 @@ const CharactersSidebar: React.FC<CharactersSidebarProps> = ({
                                     ? 'text-yellow-600' 
                                     : 'text-green-600'
                               }`}>
-                                {character.currentHealth ?? calculations.maxHealth}
+                              {toNum(character.currentHealth ?? calculations.maxHealth)}
                               </span>
-                              <span className="text-muted-foreground"> / {calculations.maxHealth}</span>
+                              <span className="text-muted-foreground"> / {toNum(calculations.maxHealth)}</span>
                             </span>
                           </div>
                           <Progress 
-                            value={((character.currentHealth ?? calculations.maxHealth) / calculations.maxHealth) * 100}
+                            value={(toNum(character.currentHealth ?? calculations.maxHealth) / Math.max(1, toNum(calculations.maxHealth))) * 100}
                             className="h-2"
                             style={{
-                              '--progress-background': (character.currentHealth ?? calculations.maxHealth) < calculations.maxHealth * 0.3 
-                                ? '#dc2626' 
-                                : (character.currentHealth ?? calculations.maxHealth) < calculations.maxHealth * 0.7 
-                                  ? '#ca8a04' 
-                                  : '#16a34a'
+                              '--progress-background': '#22c55e'
                             } as React.CSSProperties}
                           />
                         </div>
@@ -207,16 +209,16 @@ const CharactersSidebar: React.FC<CharactersSidebarProps> = ({
                                   ? 'text-red-600' 
                                   : 'text-blue-600'
                               }`}>
-                                {character.currentActionPoints ?? calculations.maxActionPoints}
+                              {toNum(character.currentActionPoints ?? calculations.maxActionPoints)}
                               </span>
-                              <span className="text-muted-foreground"> / {calculations.maxActionPoints}</span>
+                              <span className="text-muted-foreground"> / {toNum(calculations.maxActionPoints)}</span>
                             </span>
                           </div>
                           <Progress 
-                            value={((character.currentActionPoints ?? calculations.maxActionPoints) / calculations.maxActionPoints) * 100}
+                            value={(toNum(character.currentActionPoints ?? calculations.maxActionPoints) / Math.max(1, toNum(calculations.maxActionPoints))) * 100}
                             className="h-2"
                             style={{
-                              '--progress-background': '#2563eb'
+                              '--progress-background': '#38bdf8'
                             } as React.CSSProperties}
                           />
                         </div>
@@ -228,13 +230,13 @@ const CharactersSidebar: React.FC<CharactersSidebarProps> = ({
                               <span className="text-sm font-medium text-sidebar-foreground">Armatura:</span>
                               <span className="text-sm font-mono">
                                 <span className="text-gray-600">
-                                  {character.currentArmor ?? calculations.totalArmor}
+                                  {toNum(character.currentArmor ?? calculations.totalArmor)}
                                 </span>
-                                <span className="text-muted-foreground"> / {calculations.totalArmor}</span>
+                                <span className="text-muted-foreground"> / {toNum(calculations.totalArmor)}</span>
                               </span>
                             </div>
                             <Progress 
-                              value={((character.currentArmor ?? calculations.totalArmor) / calculations.totalArmor) * 100}
+                              value={(toNum(character.currentArmor ?? calculations.totalArmor) / Math.max(1, toNum(calculations.totalArmor))) * 100}
                               className="h-2"
                               style={{
                                 '--progress-background': '#6b7280'
@@ -256,6 +258,33 @@ const CharactersSidebar: React.FC<CharactersSidebarProps> = ({
                             )}
                           </span>
                         </div>
+                        {isSelected && Array.isArray(character.specifics) && character.specifics.length > 0 && (
+                          <div className="space-y-2 pt-1">
+                            {character.specifics.map((spec) => {
+                              const maxValue = Math.max(0, toNum(spec.max ?? 0));
+                              const currentValue = Math.min(Math.max(0, toNum(spec.current ?? 0)), maxValue || 0);
+                              const progressValue = maxValue > 0 ? (currentValue / maxValue) * 100 : 0;
+                              return (
+                                <div key={spec.id} className="space-y-1">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm font-medium text-sidebar-foreground">{spec.name}:</span>
+                                    <span className="text-sm font-mono">
+                                      <span className="text-gray-600">{currentValue}</span>
+                                      <span className="text-muted-foreground"> / {maxValue}</span>
+                                    </span>
+                                  </div>
+                                  <Progress
+                                    value={progressValue}
+                                    className="h-2"
+                                    style={{
+                                      '--progress-background': spec.color || '#6b7280'
+                                    } as React.CSSProperties}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

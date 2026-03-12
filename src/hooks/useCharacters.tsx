@@ -7,10 +7,100 @@ import { isLocalDb } from '@/integrations/localdb';
 import * as LocalChars from '@/integrations/localdb/characters';
 import { isLocalServer } from '@/integrations/localserver';
 import * as Api from '@/integrations/localserver/api';
-import { isAllZeroStats, pruneEmptyFields } from '@/lib/utils';
+import { isAllZeroStats, pruneEmptyFields, readSpecificCatalog } from '@/lib/utils';
 
 const normalizeAlwaysActiveAnomalies = (character: Character): Character => {
   const listBase = Array.isArray((character as any)?.anomalies) ? ((character as any).anomalies as StatusAnomaly[]) : [];
+
+  const toNumber = (value: any) => {
+    if (typeof value === 'number') return value;
+    const s = String(value ?? '').trim().replace(',', '.');
+    const m = s.match(/-?\d+(?:\.\d+)?/);
+    return m ? parseFloat(m[0]) : 0;
+  };
+
+  const getClassicSpecificValues = (key: string) => {
+    if (key === 'hp') {
+      const current = toNumber((character as any)?.currentHealth ?? (character as any)?.health?.current ?? (character as any)?.health ?? 0);
+      const max = toNumber((character as any)?.maxHealth ?? (character as any)?.health?.max ?? (character as any)?.health ?? 0);
+      return { current, max };
+    }
+    if (key === 'pa') {
+      const current = toNumber((character as any)?.currentActionPoints ?? (character as any)?.actionPoints?.current ?? (character as any)?.actionPoints ?? 0);
+      const max = toNumber((character as any)?.maxActionPoints ?? (character as any)?.actionPoints?.max ?? (character as any)?.actionPoints ?? 0);
+      return { current, max };
+    }
+    if (key === 'armor') {
+      const current = toNumber((character as any)?.currentArmor ?? (character as any)?.armor ?? (character as any)?.baseArmor ?? 0);
+      const max = toNumber((character as any)?.baseArmor ?? (character as any)?.armor ?? (character as any)?.currentArmor ?? 0);
+      return { current, max };
+    }
+    const stats = (character as any)?.baseStats ?? {};
+    const current = toNumber(stats?.[key] ?? (character as any)?.[key] ?? 0);
+    return { current, max: current };
+  };
+
+  const getCustomSpecificValues = (spec: any) => {
+    const list = Array.isArray((character as any)?.specifics) ? ((character as any).specifics as any[]) : [];
+    const specId = String(spec?.id ?? '').trim();
+    const specKey = String(spec?.key ?? '').trim();
+    const specName = String(spec?.name ?? '').trim();
+    const found =
+      list.find((s: any) => String(s?.id ?? '') === specId) ??
+      list.find((s: any) => String(s?.id ?? '') === specKey) ??
+      list.find((s: any) => String(s?.name ?? '') === specName) ??
+      null;
+    return {
+      current: toNumber(found?.current ?? 0),
+      max: toNumber(found?.max ?? 0),
+    };
+  };
+
+  const getSpecificValues = (spec: any) => {
+    const rawId = String(spec?.id ?? '').trim();
+    const rawKey = String(spec?.key ?? '').trim();
+    const kind = spec?.kind === 'classic' || rawId.startsWith('classic:') ? 'classic' : 'custom';
+    if (kind === 'classic') {
+      const key = rawKey || rawId.replace(/^classic:/, '');
+      return getClassicSpecificValues(key);
+    }
+    return getCustomSpecificValues(spec);
+  };
+
+  const meetsPassiveConditions = (levelObj: any) => {
+    const typesRaw = Array.isArray((levelObj as any)?.passive_condition_types)
+      ? (levelObj as any).passive_condition_types
+      : Array.isArray((levelObj as any)?.passiveConditionTypes)
+        ? (levelObj as any).passiveConditionTypes
+        : [];
+    const specificsRaw = Array.isArray((levelObj as any)?.passive_specific_conditions)
+      ? (levelObj as any).passive_specific_conditions
+      : Array.isArray((levelObj as any)?.passiveSpecificConditions)
+        ? (levelObj as any).passiveSpecificConditions
+        : [];
+    const types = (Array.isArray(typesRaw) ? typesRaw : [])
+      .map((t: any) => String(t ?? '').trim())
+      .filter(Boolean);
+    const specifics = (Array.isArray(specificsRaw) ? specificsRaw : [])
+      .filter((s: any) => ((s?.id ?? '').toString().trim().length > 0) || ((s?.name ?? '').toString().trim().length > 0) || ((s?.key ?? '').toString().trim().length > 0));
+    if (types.length === 0 || specifics.length === 0) return true;
+
+    return specifics.every((spec: any) => {
+      const { current, max } = getSpecificValues(spec);
+      const percent = max > 0 ? (current / max) * 100 : 0;
+      const minPercent = toNumber(spec?.min_percent ?? spec?.minPercent ?? 0);
+      const maxPercent = toNumber(spec?.max_percent ?? spec?.maxPercent ?? 0);
+      const minValue = toNumber(spec?.min_value ?? spec?.minValue ?? 0);
+      const maxValue = toNumber(spec?.max_value ?? spec?.maxValue ?? 0);
+      return types.every((type) => {
+        if (type === 'specific_percent_lt') return percent <= maxPercent;
+        if (type === 'specific_percent_gt') return percent >= minPercent;
+        if (type === 'specific_value_lt') return current <= maxValue;
+        if (type === 'specific_value_gt') return current >= minValue;
+        return true;
+      });
+    });
+  };
 
   const buildFromItem = (sourceType: 'spell' | 'ability', item: any): StatusAnomaly[] => {
     const sourceId = String(item?.id ?? item?.name ?? '').trim();
@@ -19,6 +109,7 @@ const normalizeAlwaysActiveAnomalies = (character: Character): Character => {
     const levelNum = Number(item?.current_level ?? item?.currentLevel ?? item?.level ?? 1) || 1;
     const levels = Array.isArray(item?.levels) ? item.levels : [];
     const levelObj = levels.find((l: any) => Number(l?.level ?? 0) === levelNum) || levels[0] || item || {};
+    if (!meetsPassiveConditions(levelObj)) return [];
     const passive = Array.isArray((levelObj as any)?.passive_anomalies) ? (levelObj as any).passive_anomalies : [];
 
     const out: StatusAnomaly[] = [];
@@ -101,7 +192,123 @@ const normalizeAlwaysActiveAnomalies = (character: Character): Character => {
     nextList.push(d);
   }
 
-  return { ...(character as any), anomalies: nextList } as Character;
+  const catalog = readSpecificCatalog();
+  const catalogById = new Map(catalog.map((c: any) => [String(c?.id ?? ''), c]));
+  const normalizeType = (v: any) => String(v ?? '').trim().toLowerCase();
+  const resolveLevel = (item: any) => {
+    const levelNum = Number(item?.current_level ?? item?.currentLevel ?? item?.level ?? 1) || 1;
+    const levels = Array.isArray(item?.levels) ? item.levels : [];
+    return levels.find((l: any) => Number(l?.level ?? 0) === levelNum) || levels[0] || item || {};
+  };
+  const requiredMap = new Map<string, { id: string; name: string; max: number; color?: string }>();
+  const addRequired = (spec: any) => {
+    const id = String(spec?.id ?? '').trim();
+    const name = String(spec?.name ?? '').trim();
+    const key = id || name;
+    if (!key) return;
+    const maxVal = toNumber(spec?.max ?? spec?.value ?? 0);
+    if (maxVal <= 0) return;
+    const fromCatalog = id ? catalogById.get(id) : catalog.find((c: any) => String(c?.name ?? '').trim() === name);
+    const prev = requiredMap.get(key);
+    const nextMax = Math.max(prev?.max ?? 0, maxVal);
+    requiredMap.set(key, { id: id || (fromCatalog?.id ?? ''), name: name || (fromCatalog?.name ?? ''), max: nextMax, color: fromCatalog?.color });
+  };
+  spells.forEach((spell: any) => {
+    const t = normalizeType(spell?.type ?? (spell as any)?.spell_type);
+    if (t !== 'passiva') return;
+    const lvl = resolveLevel(spell);
+    const list = Array.isArray((lvl as any)?.passive_custom_specifics)
+      ? (lvl as any).passive_custom_specifics
+      : Array.isArray((spell as any)?.passive_custom_specifics)
+        ? (spell as any).passive_custom_specifics
+        : [];
+    list.forEach(addRequired);
+  });
+  abilities.forEach((ability: any) => {
+    const t = normalizeType(ability?.type ?? (ability as any)?.ability_type);
+    if (t !== 'passiva') return;
+    const lvl = resolveLevel(ability);
+    const list = Array.isArray((lvl as any)?.passive_custom_specifics)
+      ? (lvl as any).passive_custom_specifics
+      : Array.isArray((ability as any)?.passive_custom_specifics)
+        ? (ability as any).passive_custom_specifics
+        : [];
+    list.forEach(addRequired);
+  });
+  const currentSpecifics = Array.isArray((character as any)?.specifics) ? ((character as any).specifics as any[]) : [];
+  const keyOfSpecific = (spec: any) => {
+    const id = String(spec?.id ?? '').trim();
+    const name = String(spec?.name ?? '').trim();
+    return id || name;
+  };
+  const requiredKeys = new Set(Array.from(requiredMap.keys()));
+  const nextSpecifics = currentSpecifics
+    .filter((s: any) => {
+      if (!s?.auto) return true;
+      const key = keyOfSpecific(s);
+      return key ? requiredKeys.has(key) : false;
+    })
+    .map((s: any) => {
+      const baseMax = toNumber(s?.base_max ?? s?.baseMax ?? s?.max ?? 0);
+      const current = toNumber(s?.current ?? 0);
+      return { ...s, base_max: baseMax, max: baseMax, current, bonus_max: undefined };
+    });
+  const findSpecificIndex = (spec: { id?: string; name?: string }) =>
+    nextSpecifics.findIndex((s: any) => keyOfSpecific(s) === keyOfSpecific(spec));
+  requiredMap.forEach((spec) => {
+    const idx = findSpecificIndex(spec);
+    if (idx >= 0) {
+      const existing = nextSpecifics[idx];
+      const baseMax = Math.max(toNumber(existing?.base_max ?? existing?.max ?? 0), spec.max);
+      nextSpecifics[idx] = { ...existing, id: spec.id || existing?.id, name: spec.name || existing?.name, base_max: baseMax, max: baseMax, color: existing?.color ?? spec.color, auto: true };
+    } else {
+      nextSpecifics.push({ id: spec.id, name: spec.name || 'Specifica', base_max: spec.max, max: spec.max, current: 0, color: spec.color, auto: true });
+    }
+  });
+  const equipmentList = Array.isArray((character as any)?.equipment)
+    ? ((character as any).equipment as any[])
+    : Object.values((character as any)?.equipment || {}).filter(Boolean) as any[];
+  const equipmentBonusMap = new Map<string, { id: string; name: string; bonus: number; color?: string }>();
+  const addEquipmentSpecific = (spec: any) => {
+    const id = String(spec?.id ?? '').trim();
+    const name = String(spec?.name ?? '').trim();
+    const key = id || name;
+    if (!key) return;
+    const bonus = toNumber(spec?.max ?? spec?.value ?? 0);
+    if (bonus <= 0) return;
+    const fromCatalog = id ? catalogById.get(id) : catalog.find((c: any) => String(c?.name ?? '').trim() === name);
+    const prev = equipmentBonusMap.get(key);
+    equipmentBonusMap.set(key, {
+      id: id || (fromCatalog?.id ?? ''),
+      name: name || (fromCatalog?.name ?? ''),
+      bonus: (prev?.bonus ?? 0) + bonus,
+      color: fromCatalog?.color ?? prev?.color,
+    });
+  };
+  equipmentList.forEach((item: any) => {
+    const list = Array.isArray(item?.custom_specifics)
+      ? item.custom_specifics
+      : Array.isArray(item?.customSpecifics)
+        ? item.customSpecifics
+        : Array.isArray(item?.data?.custom_specifics)
+          ? item.data.custom_specifics
+          : [];
+    list.forEach(addEquipmentSpecific);
+  });
+  equipmentBonusMap.forEach((spec) => {
+    const idx = findSpecificIndex(spec);
+    if (idx >= 0) {
+      const existing = nextSpecifics[idx];
+      const baseMax = toNumber(existing?.base_max ?? existing?.max ?? 0);
+      const totalMax = baseMax + spec.bonus;
+      const current = Math.min(toNumber(existing?.current ?? 0), totalMax);
+      nextSpecifics[idx] = { ...existing, id: spec.id || existing?.id, name: spec.name || existing?.name, base_max: baseMax, bonus_max: spec.bonus, max: totalMax, current, color: existing?.color ?? spec.color };
+    } else {
+      nextSpecifics.push({ id: spec.id, name: spec.name || 'Specifica', base_max: 0, bonus_max: spec.bonus, max: spec.bonus, current: 0, color: spec.color });
+    }
+  });
+
+  return { ...(character as any), anomalies: nextList, specifics: nextSpecifics } as Character;
 };
 
 const hydrateDamageBonusEffectNames = async (characters: Character[]) => {
@@ -276,6 +483,8 @@ const isCompactRef = (item: any): boolean => {
 
 const compactSpellOrAbility = (item: any) => {
   if (isEquipmentDerivedPower(item)) return item;
+  if (isCompactRef(item)) return item;
+  if (Array.isArray(item?.levels) && item.levels.length > 0) return item;
   const id = String(item?.spell_id ?? item?.ability_id ?? item?.id ?? '').trim();
   if (!id) return item;
   const current_level = getRefLevel(item);
@@ -778,7 +987,8 @@ export const getDefaultCharacterTemplate = (name: string): Character => ({
   },
   // Aggiungi questi campi:
   custom_spells: [],
-  custom_abilities: []
+  custom_abilities: [],
+  specifics: []
 });
 
 const ensureCharacterDefaults = (character: any): Character => {
@@ -805,6 +1015,7 @@ const ensureCharacterDefaults = (character: any): Character => {
     evocations: normalizedEvocations,
     custom_spells: Array.isArray((base as any)?.custom_spells) ? (base as any).custom_spells : (template as any).custom_spells,
     custom_abilities: Array.isArray((base as any)?.custom_abilities) ? (base as any).custom_abilities : (template as any).custom_abilities,
+    specifics: Array.isArray((base as any)?.specifics) ? (base as any).specifics : (template as any).specifics,
   } as Character;
 };
 

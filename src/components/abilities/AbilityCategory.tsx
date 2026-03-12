@@ -43,11 +43,11 @@ export function AbilityCategory({
   return (
     <Card className="border border-gray-200">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <Button
             variant="ghost"
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-2 p-0 h-auto"
+            className="flex items-center gap-2 p-0 h-auto justify-start"
           >
             <CardTitle className="text-base font-semibold">
               {categoryConfig.name}

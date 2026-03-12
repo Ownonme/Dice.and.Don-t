@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { listDamageEffects } from '@/integrations/supabase/damageEffects';
+import { listAnomalies } from '@/integrations/supabase/anomalies';
 import { ABILITY_GRADES, ABILITY_SECTIONS } from '@/constants/abilityConfig';
 import { MAGIC_GRADES, MAGIC_SECTIONS } from '@/constants/magicConfig';
 
@@ -78,12 +79,24 @@ export interface AdminAnomalyDefinition {
   tempArmour?: number | null;
   damageBonusEnabled?: boolean;
   damageBonus?: DamageBonusDefinition;
+  extraDamageEnabled?: boolean;
+  extraDamage?: {
+    effects?: Array<{
+      damageEffectId?: string;
+      damageEffectName?: string;
+      min?: number;
+      max?: number;
+    }>;
+  };
   damageReductionEnabled?: boolean;
   damageReduction?: DamageEffectValueDefinition;
   weaknessEnabled?: boolean;
   weakness?: DamageEffectValueDefinition;
   paDiscountEnabled?: boolean;
   paDiscount?: PaDiscountDefinition;
+  immunityTotal?: boolean;
+  immunityAnomalies?: Array<{ id?: string; name?: string }>;
+  immunityDamageEffects?: Array<{ id?: string; name?: string }>;
 }
 
 interface AnomalyAdminModalProps {
@@ -107,6 +120,12 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
   const [damageSets, setDamageSets] = useState<DamageSetRow[]>([]);
   const [damageEffectOptions, setDamageEffectOptions] = useState<{ id: string; name: string }[]>([]);
   const [damageEffectLoading, setDamageEffectLoading] = useState(false);
+  const [anomalyOptions, setAnomalyOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [anomalyLoading, setAnomalyLoading] = useState(false);
+  const [immunityEnabled, setImmunityEnabled] = useState(false);
+  const [immunityTotal, setImmunityTotal] = useState(false);
+  const [immunityAnomalyIds, setImmunityAnomalyIds] = useState<string[]>([]);
+  const [immunityDamageEffectIds, setImmunityDamageEffectIds] = useState<string[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -125,6 +144,27 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
       }
     };
     fetchDamageEffects();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const fetchAnomalies = async () => {
+      setAnomalyLoading(true);
+      try {
+        const list = await listAnomalies();
+        const mapped = Array.isArray(list) ? list.map((a: any) => ({ id: String(a.id || ''), name: String(a.name || '') })) : [];
+        if (active) setAnomalyOptions(mapped);
+      } catch (error) {
+        console.error('Error loading anomalies', error);
+        if (active) setAnomalyOptions([]);
+      } finally {
+        if (active) setAnomalyLoading(false);
+      }
+    };
+    fetchAnomalies();
     return () => {
       active = false;
     };
@@ -155,6 +195,8 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
   const [damageBonusClassicAdditional, setDamageBonusClassicAdditional] = useState<string>('');
   const [damageBonusPercentageGuaranteed, setDamageBonusPercentageGuaranteed] = useState<string>('');
   const [damageBonusPercentageAdditional, setDamageBonusPercentageAdditional] = useState<string>('');
+  const [extraDamageEnabled, setExtraDamageEnabled] = useState(false);
+  const [extraDamageEffects, setExtraDamageEffects] = useState<Array<{ damageEffectId: string; min: string; max: string }>>([]);
 
   const [damageReductionEnabled, setDamageReductionEnabled] = useState(false);
   const [damageReductionIsSpecific, setDamageReductionIsSpecific] = useState(false);
@@ -244,6 +286,8 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
     setDamageBonusClassicAdditional('');
     setDamageBonusPercentageGuaranteed('');
     setDamageBonusPercentageAdditional('');
+    setExtraDamageEnabled(false);
+    setExtraDamageEffects([]);
     setDamageReductionEnabled(false);
     setDamageReductionIsSpecific(false);
     setDamageReductionMode('classic');
@@ -269,6 +313,10 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
     setPaDiscountClassicAdditional('');
     setPaDiscountPercentageGuaranteed('');
     setPaDiscountPercentageAdditional('');
+    setImmunityEnabled(false);
+    setImmunityTotal(false);
+    setImmunityAnomalyIds([]);
+    setImmunityDamageEffectIds([]);
   };
 
   useEffect(() => {
@@ -335,6 +383,19 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
       initialDef.tempActionPoints === null || initialDef.tempActionPoints === undefined ? '' : String(Number(initialDef.tempActionPoints) || 0),
     );
     setTempArmour(initialDef.tempArmour === null || initialDef.tempArmour === undefined ? '' : String(Number(initialDef.tempArmour) || 0));
+    const immunityTotalInit = !!((initialDef as any).immunityTotal ?? (initialDef as any).immunity_total);
+    const immunityAnomsRaw = Array.isArray((initialDef as any).immunityAnomalies) ? (initialDef as any).immunityAnomalies : Array.isArray((initialDef as any).immunity_anomalies) ? (initialDef as any).immunity_anomalies : [];
+    const immunityEffectsRaw = Array.isArray((initialDef as any).immunityDamageEffects) ? (initialDef as any).immunityDamageEffects : Array.isArray((initialDef as any).immunity_damage_effects) ? (initialDef as any).immunity_damage_effects : [];
+    const immunityAnomIds = immunityAnomsRaw
+      .map((a: any) => String(a?.id ?? a ?? '').trim())
+      .filter((v: string) => !!v);
+    const immunityEffectIds = immunityEffectsRaw
+      .map((e: any) => String(e?.id ?? e ?? '').trim())
+      .filter((v: string) => !!v);
+    setImmunityEnabled(immunityTotalInit || immunityAnomIds.length > 0 || immunityEffectIds.length > 0);
+    setImmunityTotal(immunityTotalInit);
+    setImmunityAnomalyIds(immunityAnomIds);
+    setImmunityDamageEffectIds(immunityEffectIds);
 
     const db = initialDef.damageBonus;
     setDamageBonusEnabled(!!initialDef.damageBonusEnabled || !!db);
@@ -346,6 +407,18 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
     setDamageBonusClassicAdditional(toStr(db?.classicAdditional));
     setDamageBonusPercentageGuaranteed(toStr(db?.percentageGuaranteed));
     setDamageBonusPercentageAdditional(toStr(db?.percentageAdditional));
+
+    const ex = (initialDef as any)?.extraDamage;
+    setExtraDamageEnabled(!!(initialDef as any)?.extraDamageEnabled || !!ex);
+    setExtraDamageEffects(
+      Array.isArray(ex?.effects)
+        ? ex.effects.map((r: any) => ({
+            damageEffectId: String(r?.damageEffectId ?? r?.damage_effect_id ?? ''),
+            min: r?.min != null ? String(r.min) : '',
+            max: r?.max != null ? String(r.max) : '',
+          }))
+        : [],
+    );
 
     const dr = initialDef.damageReduction;
     setDamageReductionEnabled(!!initialDef.damageReductionEnabled || !!dr);
@@ -416,6 +489,19 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
         percentageGuaranteed: damageBonusPercentageGuaranteed === '' ? 0 : Number(damageBonusPercentageGuaranteed) || 0,
         percentageAdditional: damageBonusPercentageAdditional === '' ? 0 : Number(damageBonusPercentageAdditional) || 0,
       } : undefined,
+      extraDamageEnabled,
+      extraDamage: extraDamageEnabled ? {
+        effects: (extraDamageEffects || [])
+          .map((row) => {
+            const id = String(row?.damageEffectId || '').trim();
+            if (!id) return null;
+            const name = damageEffectOptions.find((o) => String(o.id) === String(id))?.name || '';
+            const min = row?.min === '' ? 0 : Number(row?.min || 0) || 0;
+            const max = row?.max === '' ? 0 : Number(row?.max || 0) || 0;
+            return { damageEffectId: id, damageEffectName: name, min, max };
+          })
+          .filter(Boolean),
+      } : undefined,
       damageReductionEnabled,
       damageReduction: damageReductionEnabled ? {
         isSpecific: damageReductionIsSpecific,
@@ -457,6 +543,23 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
         percentageGuaranteed: paDiscountPercentageGuaranteed === '' ? 0 : Number(paDiscountPercentageGuaranteed) || 0,
         percentageAdditional: paDiscountPercentageAdditional === '' ? 0 : Number(paDiscountPercentageAdditional) || 0,
       } : undefined,
+      immunityTotal: immunityEnabled ? !!immunityTotal : false,
+      immunityAnomalies: (immunityEnabled && !immunityTotal)
+        ? immunityAnomalyIds
+            .map((id) => ({
+              id,
+              name: anomalyOptions.find((o) => String(o.id) === String(id))?.name || '',
+            }))
+            .filter((a) => !!String(a.id || '').trim() || !!String(a.name || '').trim())
+        : [],
+      immunityDamageEffects: (immunityEnabled && !immunityTotal)
+        ? immunityDamageEffectIds
+            .map((id) => ({
+              id,
+              name: damageEffectOptions.find((o) => String(o.id) === String(id))?.name || '',
+            }))
+            .filter((a) => !!String(a.id || '').trim() || !!String(a.name || '').trim())
+        : [],
     };
     onSave(def);
     resetAll();
@@ -715,6 +818,90 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Danno extra?</Label>
+                <p className="text-xs text-muted-foreground">Aggiunge un tiro extra per ciascun effetto selezionato.</p>
+              </div>
+              <Switch
+                checked={extraDamageEnabled}
+                onCheckedChange={(checked) => {
+                  setExtraDamageEnabled(checked);
+                  if (!checked) {
+                    setExtraDamageEffects([]);
+                    return;
+                  }
+                  if ((extraDamageEffects || []).length === 0) {
+                    setExtraDamageEffects([{ damageEffectId: '', min: '', max: '' }]);
+                  }
+                }}
+              />
+            </div>
+            {extraDamageEnabled && (
+              <div className="space-y-3">
+                {(extraDamageEffects || []).map((row, idx) => (
+                  <div key={`ed:${idx}`} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+                    <div className="md:col-span-3">
+                      <Label>Effetto di danno</Label>
+                      <Select
+                        value={String(row?.damageEffectId || '')}
+                        onValueChange={(value) => {
+                          setExtraDamageEffects((prev) => (prev || []).map((r, i) => (i === idx ? { ...r, damageEffectId: value } : r)));
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={damageEffectLoading ? 'Caricamento...' : 'Seleziona effetto'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {damageEffectOptions.map((opt) => (
+                            <SelectItem key={`ed:${opt.id}`} value={opt.id}>
+                              {opt.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="md:col-span-1">
+                      <Label>Min</Label>
+                      <Input
+                        type="number"
+                        value={String(row?.min ?? '')}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setExtraDamageEffects((prev) =>
+                            (prev || []).map((r, i) => (i === idx ? { ...r, min: v } : r)),
+                          );
+                        }}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="md:col-span-1">
+                      <Label>Max</Label>
+                      <Input
+                        type="number"
+                        value={String(row?.max ?? '')}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setExtraDamageEffects((prev) =>
+                            (prev || []).map((r, i) => (i === idx ? { ...r, max: v } : r)),
+                          );
+                        }}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="md:col-span-1 flex items-end">
+                      <Button variant="ghost" onClick={() => setExtraDamageEffects((prev) => (prev || []).filter((_, i) => i !== idx))} className="w-full">Rimuovi</Button>
+                    </div>
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" type="button" onClick={() => setExtraDamageEffects((prev) => [...(Array.isArray(prev) ? prev : []), { damageEffectId: '', min: '', max: '' }])}>
+                  Aggiungi effetto
+                </Button>
               </div>
             )}
           </div>
@@ -1123,6 +1310,106 @@ export const AnomalyAdminModal = ({ isOpen, onClose, onSave, initialDef, saveLab
                     <div>
                       <Label>Aggiuntivo</Label>
                       <Input type="number" value={paDiscountPercentageAdditional} onChange={(e) => setPaDiscountPercentageAdditional(e.target.value)} placeholder="0" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Immunità?</Label>
+              <Switch checked={immunityEnabled} onCheckedChange={setImmunityEnabled} />
+            </div>
+            {immunityEnabled && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Immunità totale?</Label>
+                  <Switch checked={immunityTotal} onCheckedChange={setImmunityTotal} />
+                </div>
+                {!immunityTotal && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Immunità anomalie</Label>
+                      <Select
+                        value=""
+                        onValueChange={(value) => {
+                          if (!value) return;
+                          setImmunityAnomalyIds(prev => (prev.includes(value) ? prev : [...prev, value]));
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={anomalyLoading ? 'Caricamento...' : 'Aggiungi anomalia'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {anomalyOptions.map((opt) => (
+                            <SelectItem key={`imm-an:${opt.id}`} value={opt.id}>
+                              {opt.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex flex-wrap gap-2">
+                        {immunityAnomalyIds.map((id) => {
+                          const label = anomalyOptions.find(o => String(o.id) === String(id))?.name || id;
+                          return (
+                            <Button
+                              key={`imma:${id}`}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setImmunityAnomalyIds(prev => prev.filter(x => x !== id))}
+                            >
+                              {label}
+                            </Button>
+                          );
+                        })}
+                        {immunityAnomalyIds.length === 0 && (
+                          <div className="text-xs text-muted-foreground">Nessuna anomalia selezionata</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Immunità effetti danno</Label>
+                      <Select
+                        value=""
+                        onValueChange={(value) => {
+                          if (!value) return;
+                          setImmunityDamageEffectIds(prev => (prev.includes(value) ? prev : [...prev, value]));
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={damageEffectLoading ? 'Caricamento...' : 'Aggiungi effetto'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {damageEffectOptions.map((opt) => (
+                            <SelectItem key={`imm-de:${opt.id}`} value={opt.id}>
+                              {opt.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex flex-wrap gap-2">
+                        {immunityDamageEffectIds.map((id) => {
+                          const label = damageEffectOptions.find(o => String(o.id) === String(id))?.name || id;
+                          return (
+                            <Button
+                              key={`immde:${id}`}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setImmunityDamageEffectIds(prev => prev.filter(x => x !== id))}
+                            >
+                              {label}
+                            </Button>
+                          );
+                        })}
+                        {immunityDamageEffectIds.length === 0 && (
+                          <div className="text-xs text-muted-foreground">Nessun effetto selezionato</div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

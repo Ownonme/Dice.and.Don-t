@@ -105,6 +105,9 @@ interface Spell {
   additional_description?: string | null;
   story_1?: string | null;
   story_2?: string | null;
+  immunity_total?: boolean;
+  immunity_anomalies?: Array<{ id?: string; name?: string } | string>;
+  immunity_damage_effects?: Array<{ id?: string; name?: string } | string>;
   levels?: SpellLevel[];
   usage_every_n_turns_enabled?: boolean;
   usage_every_n_turns?: number | string | null;
@@ -125,6 +128,32 @@ const n = (v: unknown): number => {
 };
 const gt0 = (v: unknown): boolean => n(v) > 0;
 const hasText = (v?: string | null): boolean => !!(v && v.trim().length);
+const mapSpecifics = (raw: any[]) =>
+  (Array.isArray(raw) ? raw : [])
+    .map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      value: n(r?.value ?? r?.amount ?? 0),
+    }))
+    .filter((r: any) => r.value > 0 && (r.id || r.name));
+const mapMaxSpecifics = (raw: any[]) =>
+  (Array.isArray(raw) ? raw : [])
+    .map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      max: n(r?.max ?? r?.value ?? 0),
+    }))
+    .filter((r: any) => r.max > 0 && (r.id || r.name));
+const getLevelSpecifics = (level: any, spell: any, key: 'consume_custom_specifics' | 'generate_custom_specifics') => {
+  const fromLevel = Array.isArray(level?.[key]) ? level[key] : null;
+  const fromSpell = Array.isArray(spell?.[key]) ? spell[key] : null;
+  return mapSpecifics(fromLevel && fromLevel.length > 0 ? fromLevel : (fromSpell || []));
+};
+const getLevelPassiveCustomSpecifics = (level: any, spell: any) => {
+  const fromLevel = Array.isArray((level as any)?.passive_custom_specifics) ? (level as any).passive_custom_specifics : null;
+  const fromSpell = Array.isArray((spell as any)?.passive_custom_specifics) ? (spell as any).passive_custom_specifics : null;
+  return mapMaxSpecifics(fromLevel && fromLevel.length > 0 ? fromLevel : (fromSpell || []));
+};
 // Aggiunta: label leggibile per statistiche
 const prettyStatLabel = (key: string): string => {
   const map: Record<string, string> = {
@@ -231,6 +260,15 @@ export const MagicDetails = ({ spell }: MagicDetailsProps) => {
   }
 
   const currentLevel = spell.levels?.find(l => l.level === spell.current_level);
+  const immunityTotal = !!((spell as any)?.immunity_total ?? (spell as any)?.immunityTotal);
+  const immunityAnomsRaw = (spell as any)?.immunity_anomalies ?? (spell as any)?.immunityAnomalies ?? [];
+  const immunityEffectsRaw = (spell as any)?.immunity_damage_effects ?? (spell as any)?.immunityDamageEffects ?? [];
+  const mapImmunityLabel = (v: any) => {
+    if (typeof v === 'string') return v;
+    return String(v?.name ?? v?.id ?? '').trim();
+  };
+  const immunityAnoms = (Array.isArray(immunityAnomsRaw) ? immunityAnomsRaw : []).map(mapImmunityLabel).filter(Boolean);
+  const immunityEffects = (Array.isArray(immunityEffectsRaw) ? immunityEffectsRaw : []).map(mapImmunityLabel).filter(Boolean);
 
   return (
     <Card className="h-full">
@@ -313,6 +351,27 @@ export const MagicDetails = ({ spell }: MagicDetailsProps) => {
               <p className="text-sm">{spell.description}</p>
             </div>
 
+            {(immunityTotal || immunityAnoms.length > 0 || immunityEffects.length > 0) && (
+              <>
+                <Separator />
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Immunità</h4>
+                  {immunityTotal ? (
+                    <p className="text-sm text-muted-foreground">Totale</p>
+                  ) : (
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                      {immunityAnoms.length > 0 && (
+                        <div>• Anomalie: {immunityAnoms.join(', ')}</div>
+                      )}
+                      {immunityEffects.length > 0 && (
+                        <div>• Effetti danno: {immunityEffects.join(', ')}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
             {/* Livelli */}
             {spell.levels && spell.levels.length > 0 && (
               <>
@@ -324,6 +383,9 @@ export const MagicDetails = ({ spell }: MagicDetailsProps) => {
                       const showMana = gt0(level.mana_cost);
                       const showPA = gt0(level.action_cost);
                       const showIndicative = gt0(level.indicative_action_cost);
+                      const consumeSpecifics = getLevelSpecifics(level, spell, 'consume_custom_specifics');
+                      const generateSpecifics = getLevelSpecifics(level, spell, 'generate_custom_specifics');
+                      const passiveCustomSpecifics = getLevelPassiveCustomSpecifics(level, spell);
 
                       const anomalies = getTargetAnomalies(level as any);
 
@@ -383,6 +445,39 @@ export const MagicDetails = ({ spell }: MagicDetailsProps) => {
                             </div>
                           )}
 
+                          {consumeSpecifics.length > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              <span className="font-medium">Specifiche consumate:</span>
+                              <div className="ml-2">
+                                {consumeSpecifics.map((s: any, i: number) => (
+                                  <div key={`${String(s?.id || s?.name || i)}`}>• {String(s?.name || s?.id || 'Specifica')}: {n(s?.value ?? 0)}</div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {generateSpecifics.length > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              <span className="font-medium">Specifiche generate:</span>
+                              <div className="ml-2">
+                                {generateSpecifics.map((s: any, i: number) => (
+                                  <div key={`${String(s?.id || s?.name || i)}`}>• {String(s?.name || s?.id || 'Specifica')}: {n(s?.value ?? 0)}</div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {passiveCustomSpecifics.length > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              <span className="font-medium">Specifiche sbloccate:</span>
+                              <div className="ml-2">
+                                {passiveCustomSpecifics.map((s: any, i: number) => (
+                                  <div key={`${String(s?.id || s?.name || i)}`}>• {String(s?.name || s?.id || 'Specifica')}: {n(s?.max ?? 0)}</div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Anomalie */}
                           {anomalies.length > 0 && (
                             <div className="text-xs text-muted-foreground">
@@ -437,6 +532,25 @@ export const MagicDetails = ({ spell }: MagicDetailsProps) => {
                               </div>
                             </div>
                           )}
+
+                          {(() => {
+                            const everyHp = Number((level as any)?.less_health_more_damage_every_hp ?? (level as any)?.lessHealthMoreDamageEveryHp ?? 0) || 0;
+                            const rows = Array.isArray((level as any)?.damage_values) ? (level as any).damage_values : [];
+                            const incRows = rows.filter((dv: any) => gt0(dv?.less_health_more_damage_guaranteed_increment) || gt0(dv?.less_health_more_damage_additional_increment));
+                            if (!(everyHp > 0 && incRows.length > 0)) return null;
+                            return (
+                              <div className="text-xs text-muted-foreground">
+                                <span className="font-medium">Salute mancante:</span>
+                                <div className="ml-2">
+                                  {incRows.map((dv: any, i: number) => (
+                                    <div key={`mh-${i}`}>
+                                      • {(dv.typeName?.trim() || dv.name || 'Tipo')} ogni {everyHp} HP:{gt0(dv?.less_health_more_damage_guaranteed_increment) ? ` +${n(dv.less_health_more_damage_guaranteed_increment)} garantiti` : ''}{gt0(dv?.less_health_more_damage_additional_increment) ? `${gt0(dv?.less_health_more_damage_guaranteed_increment) ? ',' : ''} +${n(dv.less_health_more_damage_additional_increment)} addizionali` : ''}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           {Array.isArray((level as any).percentage_damage_values) && (level as any).percentage_damage_values.some((dv: any) => (gt0(dv.guaranteed_percentage_damage) || gt0(dv.additional_percentage_damage))) && (
                             <div className="text-xs text-muted-foreground">
@@ -975,6 +1089,25 @@ export const MagicDetails = ({ spell }: MagicDetailsProps) => {
                           </div>
                         </div>
                       )}
+
+                      {(() => {
+                        const everyHp = Number((currentLevel as any)?.less_health_more_damage_every_hp ?? (currentLevel as any)?.lessHealthMoreDamageEveryHp ?? 0) || 0;
+                        const rows = Array.isArray(currentLevel?.damage_values) ? currentLevel.damage_values : [];
+                        const incRows = rows.filter((dv: any) => gt0(dv?.less_health_more_damage_guaranteed_increment) || gt0(dv?.less_health_more_damage_additional_increment));
+                        if (!(everyHp > 0 && incRows.length > 0)) return null;
+                        return (
+                          <div className="mt-3">
+                            <span className="font-medium">Salute mancante:</span>
+                            <div className="mt-1 space-y-1">
+                              {incRows.map((dv: any, i: number) => (
+                                <div key={`mhc-${i}`} className="text-sm text-muted-foreground">
+                                  {(dv.typeName?.trim() || dv.name || 'Tipo')} ogni {everyHp} HP:{gt0(dv?.less_health_more_damage_guaranteed_increment) ? ` +${n(dv.less_health_more_damage_guaranteed_increment)} garantiti` : ''}{gt0(dv?.less_health_more_damage_additional_increment) ? `${gt0(dv?.less_health_more_damage_guaranteed_increment) ? ',' : ''} +${n(dv.less_health_more_damage_additional_increment)} addizionali` : ''}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {(() => {
                         const selfSets = Array.isArray(currentLevel?.self?.damage_sets)

@@ -46,8 +46,8 @@ import EnemyDirectModificationModal from '@/components/dice/EnemyDirectModificat
 // Layout fedele all'immagine, con margini, padding e bordi.
 
 const Box: React.FC<{ title?: string; className?: string; children?: React.ReactNode }> = ({ title, className = '', children }) => (
-  <div className={`border rounded-md p-4 bg-background ${className}`}>
-    {title ? <div className="text-sm font-semibold mb-2">{title}</div> : null}
+  <div className={`border rounded-md p-2 bg-background ${className}`}>
+    {title ? <div className="text-xs font-semibold mb-1">{title}</div> : null}
     {children}
   </div>
 );
@@ -80,6 +80,7 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
   const [isUsingPotion, setIsUsingPotion] = useState<boolean>(false);
   const [selectedPotionAnomalyDetails, setSelectedPotionAnomalyDetails] = useState<StatusAnomaly | null>(null);
   const [showStatSelectionModal, setShowStatSelectionModal] = useState(false);
+  const [showCustomSpecificsModal, setShowCustomSpecificsModal] = useState(false);
   const [isModificationModalOpen, setIsModificationModalOpen] = useState(false);
   const [showPassiveActivationModal, setShowPassiveActivationModal] = useState(false);
   const [passiveActivationTab, setPassiveActivationTab] = useState<'abilities' | 'magic'>('abilities');
@@ -107,6 +108,7 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
   const evocationsScrollRef = useRef<HTMLDivElement | null>(null);
   const evocationsModalScrollRef = useRef<HTMLDivElement | null>(null);
   const [isCharactersSidebarOpen, setIsCharactersSidebarOpen] = useState(false);
+  const [selectedPublicCharacterId, setSelectedPublicCharacterId] = useState('');
   const [publicCharacters, setPublicCharacters] = useState<any[]>([]);
   const [isEnemiesSidebarOpen, setIsEnemiesSidebarOpen] = useState(false);
   const [enemies, setEnemies] = useState<any[]>([]);
@@ -798,7 +800,8 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
       (levelData as any)?.phase2_enabled ||
       (levelData as any)?.phase3_enabled
     );
-    const index = Number((item as any)?.__phaseAttack?.index ?? -1);
+    const rawIndex = Number((item as any)?.__phaseAttack?.index ?? -1);
+    const index = Number.isFinite(rawIndex) ? rawIndex : -1;
     return { enabled: enabled && phases.length > 0, phases, index, levelData };
   };
 
@@ -821,6 +824,7 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
       if (!item) return rollData;
       const phaseInfo = extractPhaseFlowInfo(item);
       if (!phaseInfo.enabled) return rollData;
+      if (Number(phaseInfo.index) < 0) return rollData;
       const phaseData = phaseInfo.phases[phaseInfo.index];
       if (!phaseData) return rollData;
       const next = JSON.parse(JSON.stringify(rollData));
@@ -1075,6 +1079,12 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
   const handleActionFailure = async () => {
     await applyActionDurationScalingDashboard(false);
     try {
+      const characterForRoll = (pendingActorForRoll?.character ?? selectedCharacter) as any;
+      if (pendingRollData && characterForRoll) {
+        await applyCustomSpecificsFromRoll(pendingRollData, characterForRoll, 'consume');
+      }
+    } catch {}
+    try {
       if (lotteryPreview && pendingActionEntryId) {
         const correctCount = lotteryPreview.items.filter(it => it.correct).length;
         const rollSet = new Set(lotteryPreview.items.map(it => it.roll));
@@ -1154,9 +1164,12 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
                 } catch {}
               }
               const ds = (doesDmg && perTurn > 0 && effectIdToUse) ? [{ damageEffectId: String(effectIdToUse), guaranteedDamage: perTurn, additionalDamage: 0 }] : [];
+              const immunityState = getCharacterImmunityState(selectedCharacter);
+              const anomalyName = String(levelData?.failure_anomaly_name ?? 'Anomalia').trim();
+              if (isImmuneToAnomaly(immunityState, { name: anomalyName })) return;
               const a: StatusAnomaly = {
                 id: (typeof crypto !== 'undefined' && (crypto as any).randomUUID) ? (crypto as any).randomUUID() : `anom_${Date.now()}`,
-                name: String(levelData?.failure_anomaly_name ?? 'Anomalia').trim(),
+                name: anomalyName,
                 description: String(levelData?.failure_anomaly_description ?? '').trim(),
                 statsModifier: statsMod,
                 actionPointsModifier: Number(levelData?.failure_anomaly_action_points_modifier ?? 0) || 0,
@@ -1267,6 +1280,68 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
   };
 
   const normalizeTextKey = (v: any) => String(v ?? '').trim().toLowerCase();
+
+  const addImmunityKey = (set: Set<string>, id?: string, name?: string) => {
+    const idNorm = normalizeTextKey(id);
+    const nameNorm = normalizeTextKey(name);
+    if (idNorm) set.add(idNorm);
+    if (nameNorm) set.add(nameNorm);
+  };
+
+  const appendImmunityList = (set: Set<string>, raw: any) => {
+    const list = Array.isArray(raw) ? raw : [];
+    list.forEach((item) => {
+      if (typeof item === 'string') addImmunityKey(set, undefined, item);
+      else if (item) addImmunityKey(set, item.id, item.name);
+    });
+  };
+
+  const getCharacterImmunityState = (character: any) => {
+    const state = { total: false, anomalies: new Set<string>(), effects: new Set<string>() };
+    const spells = Array.isArray(character?.custom_spells) ? character.custom_spells : [];
+    const abilities = Array.isArray(character?.custom_abilities) ? character.custom_abilities : [];
+    const anomalies = Array.isArray(character?.anomalies) ? character.anomalies : [];
+    const normalizeType = (v: any) => String(v ?? '').trim().toLowerCase();
+    const resolveLevel = (item: any) => {
+      const levelNum = Number(item?.current_level ?? item?.currentLevel ?? item?.level ?? 1) || 1;
+      const levels = Array.isArray(item?.levels) ? item.levels : [];
+      return levels.find((l: any) => Number(l?.level ?? 0) === levelNum) || levels[0] || item || {};
+    };
+    const isPassiveAlwaysActive = (item: any) => {
+      const t = normalizeType(item?.type ?? item?.spell_type ?? item?.ability_type);
+      if (t !== 'passiva') return false;
+      const lvl = resolveLevel(item);
+      const passive = Array.isArray((lvl as any)?.passive_anomalies) ? (lvl as any).passive_anomalies : [];
+      return passive.some((a: any) => !!(a?.alwaysActive ?? a?.always_active));
+    };
+    [...spells, ...abilities].forEach((s: any) => {
+      if (!isPassiveAlwaysActive(s)) return;
+      if ((s?.immunity_total ?? s?.immunityTotal) === true) state.total = true;
+      appendImmunityList(state.anomalies, s?.immunity_anomalies ?? s?.immunityAnomalies);
+      appendImmunityList(state.effects, s?.immunity_damage_effects ?? s?.immunityDamageEffects);
+    });
+    anomalies.forEach((a: any) => {
+      const stats = a?.stats || {};
+      if ((a?.immunityTotal ?? a?.immunity_total ?? stats?.immunity_total) === true) state.total = true;
+      appendImmunityList(state.anomalies, a?.immunityAnomalies ?? a?.immunity_anomalies ?? stats?.immunity_anomalies);
+      appendImmunityList(state.effects, a?.immunityDamageEffects ?? a?.immunity_damage_effects ?? stats?.immunity_damage_effects);
+    });
+    return state;
+  };
+
+  const isImmuneToDamageEffect = (state: { total: boolean; effects: Set<string> }, incoming: { id?: string; name?: string }) => {
+    if (state.total) return true;
+    const idNorm = normalizeTextKey(incoming?.id);
+    const nameNorm = normalizeTextKey(incoming?.name);
+    return (idNorm && state.effects.has(idNorm)) || (nameNorm && state.effects.has(nameNorm));
+  };
+
+  const isImmuneToAnomaly = (state: { total: boolean; anomalies: Set<string> }, incoming: { id?: string; name?: string }) => {
+    if (state.total) return true;
+    const idNorm = normalizeTextKey(incoming?.id);
+    const nameNorm = normalizeTextKey(incoming?.name);
+    return (idNorm && state.anomalies.has(idNorm)) || (nameNorm && state.anomalies.has(nameNorm));
+  };
 
   const matchesDamageEffect = (def: any, incoming: { id?: string; name?: string }) => {
     const isSpecific = !!(def?.isSpecific ?? def?.is_specific);
@@ -2208,10 +2283,12 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
             (selectedCharacter && String(selectedCharacter.id) === targetId && Array.isArray((selectedCharacter as any)?.anomalies))
               ? (selectedCharacter as any).anomalies
               : (Array.isArray((updated as any)?.anomalies) ? (updated as any).anomalies : []);
+          const immunityState = getCharacterImmunityState(updated);
 
           for (const app of applications) {
-            const adjAmount = Math.floor(Math.max(0, Number(app.amount || 0)) * (1 + (Number(mods.pctGeneric || 0) / 100)));
             const incoming = { id: app.damageEffectId, name: app.damageEffectName };
+            if (isImmuneToDamageEffect(immunityState, incoming)) continue;
+            const adjAmount = Math.floor(Math.max(0, Number(app.amount || 0)) * (1 + (Number(mods.pctGeneric || 0) / 100)));
             const rw = mods.heal ? null : computeResWeakAdjustments(adjAmount, chAnoms, incoming);
             const finalAmount = mods.heal ? adjAmount : Number(rw?.final || 0);
 
@@ -2436,6 +2513,7 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
       let ar = Number((selectedCharacter as any)?.currentArmor ?? (selectedCharacter as any)?.baseArmor ?? 0);
       const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
       const logs: Array<{ eff: string; val: number }> = [];
+      const immunityState = getCharacterImmunityState(selectedCharacter);
       for (const s of (selfSets || [])) {
         const effName = String(s?.effect_name || '').trim();
         const eff = map.get(effName) || {};
@@ -2443,6 +2521,9 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
         const bonusArr = Array.isArray(eff?.bonus_effects) ? eff.bonus_effects : [];
         const healFromBonus = bonusArr.some((b: any) => String(b || '').toLowerCase().includes('ripristina'));
         const isHeal = healByName || healFromBonus;
+        if (!isHeal && isImmuneToDamageEffect(immunityState, { id: String(eff?.id || '') || undefined, name: effName || undefined })) {
+          continue;
+        }
         const flags: Array<'classic' | 'health' | 'armor' | 'ap'> = [];
         if (eff?.affects_health) flags.push('health');
         if (eff?.affects_armor) flags.push('armor');
@@ -3163,7 +3244,9 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
       if (alreadyDiscounted && Number(ac?.total || 0) > 0) {
         const apNow = Number((ch as any)?.currentActionPoints ?? (ch as any)?.actionPoints ?? 0);
         const newAp = Math.max(0, apNow - totalCost);
-        const updated = { ...(ch as any), currentActionPoints: newAp, currentHealth, currentArmor } as typeof ch;
+        const chHealth = Number((ch as any)?.currentHealth ?? (ch as any)?.health ?? 0);
+        const chArmor = Number((ch as any)?.currentArmor ?? (ch as any)?.baseArmor ?? 0);
+        const updated = { ...(ch as any), currentActionPoints: newAp, currentHealth: chHealth, currentArmor: chArmor } as typeof ch;
         const ok = await updateCharacter(updated);
         if (ok) {
           setSelectedCharacter(updated);
@@ -3253,7 +3336,9 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
       try { (d as any).triggers = { ...trig, actionCostApplied: { base: baseCost, indicativeRoll: indicativeCost, investment: investmentCost, seconds: secondsCost, total: totalCost, discounted: true } }; } catch {}
       const apNow = Number((ch as any)?.currentActionPoints ?? (ch as any)?.actionPoints ?? 0);
       const newAp = Math.max(0, apNow - totalCost);
-      const updated = { ...(ch as any), currentActionPoints: newAp, currentHealth, currentArmor } as typeof ch;
+      const chHealth = Number((ch as any)?.currentHealth ?? (ch as any)?.health ?? 0);
+      const chArmor = Number((ch as any)?.currentArmor ?? (ch as any)?.baseArmor ?? 0);
+      const updated = { ...(ch as any), currentActionPoints: newAp, currentHealth: chHealth, currentArmor: chArmor } as typeof ch;
       const ok = await updateCharacter(updated);
       if (ok) {
         setSelectedCharacter(updated);
@@ -3320,7 +3405,9 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
       if (alreadyDiscounted && Number(ac?.total || 0) > 0) {
         const apNow = Number((ch as any)?.currentActionPoints ?? (ch as any)?.actionPoints ?? 0);
         const newAp = Math.max(0, apNow - totalCost);
-        const updated = { ...(ch as any), currentActionPoints: newAp, currentHealth, currentArmor } as typeof ch;
+        const chHealth = Number((ch as any)?.currentHealth ?? (ch as any)?.health ?? 0);
+        const chArmor = Number((ch as any)?.currentArmor ?? (ch as any)?.baseArmor ?? 0);
+        const updated = { ...(ch as any), currentActionPoints: newAp, currentHealth: chHealth, currentArmor: chArmor } as typeof ch;
         const ok = await updateCharacter(updated);
         if (ok) {
           setSelectedCharacter(updated);
@@ -3399,7 +3486,9 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
       try { (d as any).triggers = { ...trig, actionCostApplied: { base: baseCost, indicativeRoll: indicativeCost, investment: investmentCost, seconds: secondsCost, total: totalCost, discounted: true } }; } catch {}
       const apNow = Number((ch as any)?.currentActionPoints ?? (ch as any)?.actionPoints ?? 0);
       const newAp = Math.max(0, apNow - totalCost);
-      const updated = { ...(ch as any), currentActionPoints: newAp, currentHealth, currentArmor } as typeof ch;
+      const chHealth = Number((ch as any)?.currentHealth ?? (ch as any)?.health ?? 0);
+      const chArmor = Number((ch as any)?.currentArmor ?? (ch as any)?.baseArmor ?? 0);
+      const updated = { ...(ch as any), currentActionPoints: newAp, currentHealth: chHealth, currentArmor: chArmor } as typeof ch;
       const ok = await updateCharacter(updated);
       if (ok) {
         setSelectedCharacter(updated);
@@ -3556,12 +3645,133 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
     } catch { return rollData; }
   };
 
+  const applyCustomSpecificsFromRoll = async (
+    rollData: any,
+    baseCharacter: any,
+    mode: 'consume' | 'generate' | 'both'
+  ) => {
+    try {
+      const d = rollData?.damage;
+      let sourceType = d?.source;
+      let item = sourceType === 'magic' ? d?.spell : sourceType === 'ability' ? d?.ability : null;
+      if ((!item || !sourceType) && rollData?.actionSource) {
+        const src = rollData.actionSource;
+        const t = String(src?.type || '').trim();
+        if (t === 'magic' || t === 'ability') {
+          sourceType = t;
+          item = src?.item;
+        }
+      }
+      if (!item || (sourceType !== 'magic' && sourceType !== 'ability')) return null;
+      if (!item) return null;
+      const ch = baseCharacter ?? selectedCharacter;
+      if (!ch) return null;
+      const toNum = (v: any): number => {
+        if (typeof v === 'number') return v;
+        const s = String(v ?? '').trim().replace(',', '.');
+        const m = s.match(/-?\d+(?:\.\d+)?/);
+        return m ? parseFloat(m[0]) : 0;
+      };
+      const resolveLevelData = (src: any, gradeNumber?: number) => {
+        const lvlNum = toNum(src?.current_level ?? src?.level ?? src?.levels?.[0]?.level ?? 1) || 1;
+        const baseLevel = Array.isArray(src?.levels)
+          ? (src.levels.find((l: any) => toNum(l?.level) === lvlNum) || src.levels[0] || src)
+          : src;
+        if (gradeNumber && gradeNumber > 1) {
+          const gradesArr = Array.isArray((baseLevel as any)?.grades) ? (baseLevel as any).grades : [];
+          if (gradesArr.length > 0) {
+            const byNumber = gradesArr.find((g: any) => toNum(g?.grade_number ?? 0) === gradeNumber);
+            return byNumber || gradesArr[Math.max(0, gradeNumber - 2)] || baseLevel;
+          }
+        }
+        return baseLevel;
+      };
+      const gradeNumber = toNum(rollData?.actionSource?.gradeNumber ?? 0);
+      const levelData = resolveLevelData(item, sourceType === 'magic' ? gradeNumber : undefined);
+      const mapSpecifics = (raw: any[]) =>
+        raw.map((r: any) => ({
+          id: String(r?.id ?? '').trim(),
+          key: String(r?.key ?? '').trim(),
+          name: String(r?.name ?? '').trim(),
+          value: toNum(r?.value ?? r?.amount ?? 0),
+        })).filter((r: any) => r.value > 0 && (r.id || r.key || r.name));
+      const consumeRaw = Array.isArray((levelData as any)?.consume_custom_specifics)
+        ? (levelData as any).consume_custom_specifics
+        : Array.isArray((item as any)?.consume_custom_specifics)
+          ? (item as any).consume_custom_specifics
+          : [];
+      const generateRaw = Array.isArray((levelData as any)?.generate_custom_specifics)
+        ? (levelData as any).generate_custom_specifics
+        : Array.isArray((item as any)?.generate_custom_specifics)
+          ? (item as any).generate_custom_specifics
+          : [];
+      const toConsume = mapSpecifics(consumeRaw);
+      const toGenerate = mapSpecifics(generateRaw);
+      if (mode === 'consume' && toConsume.length === 0) return null;
+      if (mode === 'generate' && toGenerate.length === 0) return null;
+      if (mode === 'both' && toConsume.length === 0 && toGenerate.length === 0) return null;
+      const list = Array.isArray((ch as any)?.specifics) ? (ch as any).specifics : [];
+      const applyDelta = (arr: any[], reqs: any[], dir: 1 | -1) => {
+        if (reqs.length === 0) return arr;
+        return arr.map((item: any) => {
+          const norm = (v: any) => String(v ?? '').trim().toLowerCase();
+          const itemId = norm(item?.id ?? item?.key ?? '');
+          const itemName = norm(item?.name ?? '');
+          const req = reqs.find((r: any) => {
+            const reqId = norm(r?.id ?? r?.key ?? '');
+            const reqName = norm(r?.name ?? '');
+            if (reqId && itemId && reqId === itemId) return true;
+            if (reqName && itemName && reqName === itemName) return true;
+            if (reqId && !itemId && itemName && reqId === itemName) return true;
+            return false;
+          });
+          if (!req) return item;
+          const current = toNum(item?.current ?? 0);
+          const max = toNum(item?.max ?? 0);
+          const nextValue = dir === -1
+            ? Math.max(0, current - req.value)
+            : (max > 0 ? Math.min(max, current + req.value) : Math.max(0, current + req.value));
+          if (nextValue === current) return item;
+          return { ...item, current: nextValue };
+        });
+      };
+      let nextList = list;
+      if (mode === 'consume' || mode === 'both') nextList = applyDelta(nextList, toConsume, -1);
+      if (mode === 'generate' || mode === 'both') nextList = applyDelta(nextList, toGenerate, 1);
+      const changed = JSON.stringify(nextList) !== JSON.stringify(list);
+      if (!changed) return null;
+      let updatedCharacter = { ...(ch as any), specifics: nextList } as any;
+      if (selectedCharacter && String((selectedCharacter as any)?.id) === String(updatedCharacter?.id)) {
+        updatedCharacter = {
+          ...updatedCharacter,
+          currentHealth: Number(currentHealth ?? updatedCharacter.currentHealth ?? (selectedCharacter as any)?.currentHealth ?? (selectedCharacter as any)?.health ?? 0) || 0,
+          currentActionPoints: Number(currentActionPoints ?? updatedCharacter.currentActionPoints ?? (selectedCharacter as any)?.currentActionPoints ?? (selectedCharacter as any)?.actionPoints ?? 0) || 0,
+          currentArmor: Number(currentArmor ?? updatedCharacter.currentArmor ?? (selectedCharacter as any)?.currentArmor ?? (selectedCharacter as any)?.baseArmor ?? 0) || 0,
+        } as any;
+      }
+      const ok = await updateCharacter(updatedCharacter);
+      if (ok) {
+        if (selectedCharacter && String((selectedCharacter as any)?.id) === String(updatedCharacter?.id)) {
+          setSelectedCharacter(updatedCharacter);
+        }
+        return updatedCharacter;
+      }
+    } catch {}
+    return null;
+  };
+
   const handleActionSuccessStart = (isCritical: boolean) => {
     void applyActionDurationScalingDashboard(true);
     if (pendingActionEntryId) updateEntryBadge(pendingActionEntryId, isCritical ? 'Critico!' : 'riuscito');
     setActionSuccessResolved(true);
     setDefaultCritical(isCritical);
     if (pendingRollData && getLaunchDelayTurnsFromRoll(pendingRollData) > 0) {
+      try {
+        const characterForRoll = (pendingActorForRoll?.character ?? selectedCharacter) as any;
+        if (pendingRollData && characterForRoll) {
+          void applyCustomSpecificsFromRoll(pendingRollData, characterForRoll, 'both');
+        }
+      } catch {}
       try { scheduleLaunchDelayEventFromRoll(pendingRollData, { isCritical }); } catch {}
       setPendingRollData(null);
       setPendingActorForRoll(null);
@@ -3584,6 +3794,12 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
         tryAddLevelWarningAnomalyFromRoll(pendingRollData);
         tryAddActiveSpellEventFromRoll(pendingRollData);
         applySelfEffectsFromRoll(pendingRollData);
+        try {
+          const characterForRoll = (pendingActorForRoll?.character ?? selectedCharacter) as any;
+          if (pendingRollData && characterForRoll) {
+            void applyCustomSpecificsFromRoll(pendingRollData, characterForRoll, 'both');
+          }
+        } catch {}
       }
     } catch {}
   };
@@ -3673,6 +3889,10 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
             } catch {}
           }
         }
+        try {
+          const mode = type === 'failure' ? 'consume' : 'both';
+          await applyCustomSpecificsFromRoll(pendingRollData, characterForRoll, mode);
+        } catch {}
         setMultiShotItems(remainingShots);
         if (remainingShots.length === 0) {
           try {
@@ -5396,6 +5616,7 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
     }
     if (isUsingPotion) return;
     setIsUsingPotion(true);
+    const immunityState = getCharacterImmunityState(selectedCharacter);
     const qty = Math.max(1, Math.floor(quantityToUsePotion || 1));
     const currentQty = selectedPotionItem.quantity || 0;
     if (qty > currentQty) {
@@ -5455,8 +5676,10 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
           sourceType: 'manual' as const,
           sourceId: String(selectedPotionItem.id),
         } as StatusAnomaly;
-        await addAnomaly(payload);
-        anomalyNames.push(String(payload.name || '').trim());
+        if (!isImmuneToAnomaly(immunityState, { id: payload.id, name: String(payload.name || '').trim() })) {
+          await addAnomaly(payload);
+          anomalyNames.push(String(payload.name || '').trim());
+        }
       } else if (selectedPotionItem.anomalyId) {
         try {
           const row = await (async () => {
@@ -5511,8 +5734,10 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
             paDiscountEnabled,
             paDiscount,
           } as any;
-          await addAnomaly(a);
-          anomalyNames.push(String(a.name || '').trim());
+          if (!isImmuneToAnomaly(immunityState, { id: a.id, name: String(a.name || '').trim() })) {
+            await addAnomaly(a);
+            anomalyNames.push(String(a.name || '').trim());
+          }
         } catch {}
       }
       const parts: string[] = [];
@@ -5992,19 +6217,19 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
                             {gt0(hp) && (
                               <div>
                                 <div className="flex justify-between text-xs"><span className="font-medium">Salute</span><span>{hp}</span></div>
-                                <Progress value={hpPercentage} style={{ '--progress-background': hpPercentage > 50 ? '#22c55e' : hpPercentage > 25 ? '#eab308' : '#ef4444' } as React.CSSProperties} />
+                                <Progress value={hpPercentage} style={{ '--progress-background': '#22c55e' } as React.CSSProperties} />
                               </div>
                             )}
                             {gt0(ap) && (
                               <div>
                                 <div className="flex justify-between text-xs"><span className="font-medium">PA</span><span>{ap}</span></div>
-                                <Progress value={apPercentage} style={{ '--progress-background': '#3b82f6' } as React.CSSProperties} />
+                                <Progress value={apPercentage} style={{ '--progress-background': '#38bdf8' } as React.CSSProperties} />
                               </div>
                             )}
                             {gt0(armour) && (
                               <div>
                                 <div className="flex justify-between text-xs"><span className="font-medium">Armatura</span><span>{armour}</span></div>
-                                <Progress value={armourPercentage} style={{ '--progress-background': '#8b5cf6' } as React.CSSProperties} />
+                                <Progress value={armourPercentage} style={{ '--progress-background': '#6b7280' } as React.CSSProperties} />
                               </div>
                             )}
                             {/* Statistiche rimosse in Eventi attivi: mostriamo solo barre e postura */}
@@ -6105,19 +6330,19 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
                                             {gt0(hp) && (
                                               <div>
                                                 <div className="flex justify-between text-xs"><span className="font-medium">Salute</span><span>{hp}</span></div>
-                                                <Progress value={hpPercentage} style={{ '--progress-background': hpPercentage > 50 ? '#22c55e' : hpPercentage > 25 ? '#eab308' : '#ef4444' } as React.CSSProperties} />
+                                                <Progress value={hpPercentage} style={{ '--progress-background': '#22c55e' } as React.CSSProperties} />
                                               </div>
                                             )}
                                             {gt0(ap) && (
                                               <div>
                                                 <div className="flex justify-between text-xs"><span className="font-medium">PA</span><span>{ap}</span></div>
-                                                <Progress value={apPercentage} style={{ '--progress-background': '#3b82f6' } as React.CSSProperties} />
+                                                <Progress value={apPercentage} style={{ '--progress-background': '#38bdf8' } as React.CSSProperties} />
                                               </div>
                                             )}
                                             {gt0(armour) && (
                                               <div>
                                                 <div className="flex justify-between text-xs"><span className="font-medium">Armatura</span><span>{armour}</span></div>
-                                                <Progress value={armourPercentage} style={{ '--progress-background': '#8b5cf6' } as React.CSSProperties} />
+                                                <Progress value={armourPercentage} style={{ '--progress-background': '#6b7280' } as React.CSSProperties} />
                                               </div>
                                             )}
                                           </>
@@ -6524,9 +6749,43 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showCustomSpecificsModal} onOpenChange={setShowCustomSpecificsModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Specifiche custom</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] pr-2">
+            <div className="space-y-2">
+              {(!selectedCharacter || (selectedCharacter.specifics || []).length === 0) ? (
+                <div className="text-sm text-muted-foreground">Nessuna specifica impostata.</div>
+              ) : (
+                (selectedCharacter.specifics || []).map((item: any) => {
+                  const current = Number(item?.current ?? 0) || 0;
+                  const max = Number(item?.max ?? 0) || 0;
+                  const pct = max > 0 ? (current / max) * 100 : 0;
+                  const color = item?.color || '#22c55e';
+                  return (
+                    <div key={item?.id ?? item?.name} className="border rounded-md p-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium">{item?.name || 'Specifica'}</span>
+                        <span className="text-muted-foreground">{current}/{max || 0}</span>
+                      </div>
+                      <Progress
+                        value={pct}
+                        className="h-1.5 mt-1"
+                        style={{ '--progress-background': color } as React.CSSProperties}
+                      />
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
       
 
-      {/* Modale Lancio Dado: Selezione statistica e competenze */}
       <StatSelectionDialog
         isOpen={showStatSelectionModal}
         onClose={() => { setShowStatSelectionModal(false); setPendingPassiveActivation(null); }}
@@ -6805,7 +7064,7 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
                 const idx = Number((item as any)?.__phaseAttack?.index ?? -1);
                 if (idx >= 0) return rollDataWithCost;
                 const next = JSON.parse(JSON.stringify(rollDataWithCost));
-                const nextItem = { ...(item || {}), __phaseAttack: { index: 0 } };
+                const nextItem = { ...(item || {}), __phaseAttack: { index: -1 } };
                 if (d.source === 'magic') (next.damage as any).spell = nextItem;
                 else (next.damage as any).ability = nextItem;
                 return next;
@@ -6985,6 +7244,11 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
                   await tryAddActiveSpellEventFromRoll(rollForProcessing);
                   await applySelfEffectsFromRoll(rollForProcessing);
                   await tryApplyLevelAnomaliesToTargetsFromRoll(rollForProcessing, characterForRoll);
+                  try {
+                    if (characterForRoll && pendingRollData) {
+                      await applyCustomSpecificsFromRoll(pendingRollData, characterForRoll, 'both');
+                    }
+                  } catch {}
 
                   try {
                     const d: any = pendingRollData?.damage;
@@ -7520,17 +7784,41 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
             )}
           </Box>
 
-          <div className="space-y-3">
-            <Box title="Salute:" className="text-center">
-              <div>{selectedCharacter ? `${currentHealth}/${maxHealth}` : 'x/x'}</div>
+          <div className="space-y-2">
+            <Box title="Salute:" className="text-center text-xs">
+              <div className="text-xs">{selectedCharacter ? `${currentHealth}/${maxHealth}` : 'x/x'}</div>
+              <Progress
+                value={selectedCharacter ? (Number(currentHealth || 0) / Math.max(1, Number(maxHealth || 0))) * 100 : 0}
+                className="h-1.5 mt-1"
+                style={{ '--progress-background': '#22c55e' } as React.CSSProperties}
+              />
             </Box>
-            <Box title="Armatura" className="text-center">
-              <div>{selectedCharacter ? `${currentArmor}/${totalArmor}` : 'x/x'}</div>
+            <Box title="Armatura" className="text-center text-xs">
+              <div className="text-xs">{selectedCharacter ? `${currentArmor}/${totalArmor}` : 'x/x'}</div>
+              <Progress
+                value={selectedCharacter ? (Number(currentArmor || 0) / Math.max(1, Number(totalArmor || 0))) * 100 : 0}
+                className="h-1.5 mt-1"
+                style={{ '--progress-background': '#6b7280' } as React.CSSProperties}
+              />
             </Box>
-            <Box title="Punti azione:" className="text-center">
-              <div>{selectedCharacter ? `${currentActionPoints}/${maxActionPoints}` : 'x/x'}</div>
+            <Box title="Punti azione:" className="text-center text-xs">
+              <div className="text-xs">{selectedCharacter ? `${currentActionPoints}/${maxActionPoints}` : 'x/x'}</div>
+              <Progress
+                value={selectedCharacter ? (Number(currentActionPoints || 0) / Math.max(1, Number(maxActionPoints || 0))) * 100 : 0}
+                className="h-1.5 mt-1"
+                style={{ '--progress-background': '#38bdf8' } as React.CSSProperties}
+              />
             </Box>
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full text-xs"
+            onClick={() => setShowCustomSpecificsModal(true)}
+            disabled={!selectedCharacter}
+          >
+            Specifiche custom
+          </Button>
         </div>
 
         {/* Colonna sinistra - spiegazione postura */}
@@ -7593,14 +7881,14 @@ const Box: React.FC<{ title?: string; className?: string; children?: React.React
         isOpen={isCharactersSidebarOpen}
         onClose={() => setIsCharactersSidebarOpen(false)}
         characters={publicCharacters as any}
-        selectedCharacterId={selectedCharacter?.id || ''}
+        selectedCharacterId={selectedPublicCharacterId}
         onCharacterSelect={(id: string) => {
           // Manteniamo la selezione del personaggio se appartiene all'utente
           const found = publicCharacters.find((c: any) => c.id === id);
           if (found) {
             // Non cambiamo selectedCharacter locale del dashboard per evitare inconsistenze
             // La sidebar serve come consultazione dei pubblici
-            setIsCharactersSidebarOpen(false);
+            setSelectedPublicCharacterId(id);
           }
         }}
       />

@@ -39,3 +39,42 @@ export const pruneEmptyFields = <T = any>(
 
   return prune(value);
 };
+
+export type CharacterSpecificCatalogItem = {
+  id: string;
+  name: string;
+  color?: string;
+};
+
+const SPECIFIC_CATALOG_KEY = 'character.specifics.catalog';
+
+export const readSpecificCatalog = (): CharacterSpecificCatalogItem[] => {
+  if (typeof localStorage === 'undefined') return [];
+  const raw = localStorage.getItem(SPECIFIC_CATALOG_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => ({
+        id: String((item as any)?.id || '').trim(),
+        name: String((item as any)?.name || '').trim(),
+        color: String((item as any)?.color || '').trim(),
+      }))
+      .filter((item) => item.id && item.name);
+  } catch {
+    return [];
+  }
+};
+
+export const writeSpecificCatalog = (items: CharacterSpecificCatalogItem[]) => {
+  if (typeof localStorage === 'undefined') return;
+  const cleaned = (Array.isArray(items) ? items : [])
+    .map((item) => ({
+      id: String(item?.id || '').trim(),
+      name: String(item?.name || '').trim(),
+      color: String(item?.color || '').trim(),
+    }))
+    .filter((item) => item.id && item.name);
+  localStorage.setItem(SPECIFIC_CATALOG_KEY, JSON.stringify(cleaned));
+};

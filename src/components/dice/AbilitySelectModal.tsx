@@ -15,6 +15,7 @@ interface Props {
   character?: any
   spellCooldowns?: Record<string, number>
   perTurnUses?: Record<string, number>
+  initialSearchTerm?: string
   onConfirm?: (payload: { ability: any; level: number }) => void
 }
 
@@ -29,7 +30,7 @@ const hasText = (v: unknown): boolean => {
   return String(v ?? '').trim().length > 0
 }
 
-export function AbilitySelectModal({ isOpen, onOpenChange, character, spellCooldowns, perTurnUses, onConfirm }: Props) {
+export function AbilitySelectModal({ isOpen, onOpenChange, character, spellCooldowns, perTurnUses, initialSearchTerm, onConfirm }: Props) {
   const [searchTerm, setSearchTerm] = useState('')
   const [abilities, setAbilities] = useState<any[]>([])
   const [filteredAbilities, setFilteredAbilities] = useState<any[]>([])
@@ -39,12 +40,13 @@ export function AbilitySelectModal({ isOpen, onOpenChange, character, spellCoold
   useEffect(() => {
     if (isOpen) {
       const list = Array.isArray((character as any)?.custom_abilities) ? (character as any).custom_abilities : []
-      setAbilities(list)
+      const filtered = list.filter((a: any) => String(a?.type || '').toLowerCase() !== 'passiva')
+      setAbilities(filtered)
       setSelectedAbility(null)
-      
-      setSearchTerm('')
+
+      setSearchTerm(String(initialSearchTerm ?? ''))
     }
-  }, [isOpen, character])
+  }, [isOpen, character, initialSearchTerm])
 
   useEffect(() => {
     let f = abilities
@@ -63,6 +65,50 @@ export function AbilitySelectModal({ isOpen, onOpenChange, character, spellCoold
       : selectedAbility
     return levelObj || null
   }, [selectedAbility])
+
+  const getLevelData = (ability: any) => {
+    const levelNum = toNum((ability as any)?.current_level || (ability as any)?.levels?.[0]?.level || 1)
+    if (Array.isArray((ability as any)?.levels)) {
+      return (ability as any).levels.find((l: any) => toNum((l as any)?.level) === levelNum) || (ability as any).levels[0] || ability
+    }
+    return ability
+  }
+
+  const getConsumeSpecifics = (ability: any) => {
+    const lvl = getLevelData(ability)
+    const fromLevel = Array.isArray((lvl as any)?.consume_custom_specifics) ? (lvl as any).consume_custom_specifics : []
+    const fromAbility = Array.isArray((ability as any)?.consume_custom_specifics) ? (ability as any).consume_custom_specifics : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromAbility
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      value: toNum(r?.value ?? r?.amount ?? 0),
+    })).filter((r: any) => r.value > 0 && (r.id || r.name))
+  }
+  const getGenerateSpecifics = (ability: any) => {
+    const lvl = getLevelData(ability)
+    const fromLevel = Array.isArray((lvl as any)?.generate_custom_specifics) ? (lvl as any).generate_custom_specifics : []
+    const fromAbility = Array.isArray((ability as any)?.generate_custom_specifics) ? (ability as any).generate_custom_specifics : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromAbility
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      value: toNum(r?.value ?? r?.amount ?? 0),
+    })).filter((r: any) => r.value > 0 && (r.id || r.name))
+  }
+
+  const canConsumeSpecifics = (ability: any) => {
+    const requirements = getConsumeSpecifics(ability)
+    if (requirements.length === 0) return true
+    const list = Array.isArray((character as any)?.specifics) ? (character as any).specifics : []
+    return requirements.every((req: any) => {
+      const byId = req.id ? list.find((s: any) => String(s?.id) === req.id) : null
+      const byName = !byId && req.name ? list.find((s: any) => String(s?.name || '').toLowerCase() === req.name.toLowerCase()) : null
+      const item = byId || byName
+      const current = toNum(item?.current ?? 0)
+      return current >= req.value
+    })
+  }
 
   const getMaxUsesPerTurn = (ability: any): number => {
     try {
@@ -103,7 +149,7 @@ export function AbilitySelectModal({ isOpen, onOpenChange, character, spellCoold
           </div>
 
           <div className="flex-1 overflow-hidden">
-            <ScrollArea className="h-[400px] w-full">
+            <ScrollArea className="h-[60vh] md:h-[400px] w-full">
               {filteredAbilities.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">Nessuna abilità disponibile</div>
               ) : (
@@ -116,8 +162,10 @@ export function AbilitySelectModal({ isOpen, onOpenChange, character, spellCoold
                     const usedKey = `${String((character as any)?.id ?? '')}:ability:${aid}`
                     const used = toNum((perTurnUses as any)?.[usedKey] ?? 0)
                     const isPerTurnBlocked = limit > 0 && used >= limit
+                    const hasSpecifics = canConsumeSpecifics(ability)
+                    const isSpecificBlocked = !hasSpecifics
                     return (
-                      <Card key={aid} className={`cursor-pointer transition-all duration-200 hover:shadow-md ${selectedAbility?.id === ability.id ? 'ring-2 ring-primary bg-primary/5 shadow-md' : 'hover:bg-muted/50'}`} onClick={() => { setSelectedAbility(ability) }}>
+                      <Card key={aid} className={`transition-all duration-200 hover:shadow-md ${selectedAbility?.id === ability.id ? 'ring-2 ring-primary bg-primary/5 shadow-md' : 'hover:bg-muted/50'} ${isSpecificBlocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`} onClick={() => { if (isSpecificBlocked) return; setSelectedAbility(ability) }}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -132,9 +180,26 @@ export function AbilitySelectModal({ isOpen, onOpenChange, character, spellCoold
                                   </Badge>
                                 )}
                                 {isPerTurnBlocked && (<Badge variant="secondary" className="text-xs">limite turno</Badge>)}
+                                {isSpecificBlocked && (<Badge variant="secondary" className="text-xs">specifiche insufficienti</Badge>)}
                               </div>
                               <p className="text-sm text-muted-foreground mb-2">{ability.category || '-'}{ability.subcategory ? ` • ${ability.subcategory}` : ''}</p>
                               <p className="text-sm line-clamp-2">{ability.description || ''}</p>
+                              {(() => {
+                                const lvl: any = getLevelData(ability)
+                                const everyHp = toNum(lvl?.less_health_more_damage_every_hp ?? lvl?.lessHealthMoreDamageEveryHp ?? 0)
+                                const vals = Array.isArray(lvl?.damage_values) ? lvl.damage_values : []
+                                const inc = vals.filter((v: any) => toNum(v?.less_health_more_damage_guaranteed_increment ?? 0) > 0 || toNum(v?.less_health_more_damage_additional_increment ?? 0) > 0)
+                                if (!(everyHp > 0 && inc.length > 0)) return null
+                                return (
+                                  <div className="text-xs text-muted-foreground mt-2">
+                                    {inc.map((v: any, i: number) => (
+                                      <div key={`mh-${i}`}>
+                                        Salute mancante: {String(v?.typeName || v?.name || 'Tipo')} ogni {everyHp} HP{toNum(v?.less_health_more_damage_guaranteed_increment ?? 0) > 0 ? ` +${toNum(v.less_health_more_damage_guaranteed_increment)} garantiti` : ''}{toNum(v?.less_health_more_damage_additional_increment ?? 0) > 0 ? `${toNum(v?.less_health_more_damage_guaranteed_increment ?? 0) > 0 ? ',' : ''} +${toNum(v.less_health_more_damage_additional_increment)} addizionali` : ''}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </div>
                         </CardContent>
@@ -164,6 +229,38 @@ export function AbilitySelectModal({ isOpen, onOpenChange, character, spellCoold
                       {toNum((selectedLevelData as any)?.punti_azione || (selectedLevelData as any)?.action_cost || (selectedLevelData as any)?.punti_azione_indicativi) > 0 && (
                         <div>Punti azione: {toNum((selectedLevelData as any)?.punti_azione || (selectedLevelData as any)?.action_cost || (selectedLevelData as any)?.punti_azione_indicativi)}</div>
                       )}
+                      {(() => {
+                        const reqs = selectedAbility ? getConsumeSpecifics(selectedAbility) : []
+                        if (reqs.length === 0) return null
+                        return (
+                          <div className="pt-1">
+                            <div className="text-xs text-muted-foreground">Specifiche richieste</div>
+                            <div className="space-y-0.5">
+                              {reqs.map((r, i) => (
+                                <div key={`${String(r?.id || r?.name || i)}`}>
+                                  • {String(r?.name || r?.id || 'Specifica')}: {toNum(r?.value ?? 0)}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
+                      {(() => {
+                        const gens = selectedAbility ? getGenerateSpecifics(selectedAbility) : []
+                        if (gens.length === 0) return null
+                        return (
+                          <div className="pt-1">
+                            <div className="text-xs text-muted-foreground">Specifiche generate</div>
+                            <div className="space-y-0.5">
+                              {gens.map((r, i) => (
+                                <div key={`${String(r?.id || r?.name || i)}`}>
+                                  • {String(r?.name || r?.id || 'Specifica')}: {toNum(r?.value ?? 0)}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
                       {toNum((selectedLevelData as any)?.punti_azione_indicativi || (selectedLevelData as any)?.indicative_action_cost) > 0 && (
                         <div>PA indicativi: {toNum((selectedLevelData as any)?.punti_azione_indicativi || (selectedLevelData as any)?.indicative_action_cost)}</div>
                       )}
@@ -337,9 +434,10 @@ export function AbilitySelectModal({ isOpen, onOpenChange, character, spellCoold
             const limit = selectedAbility ? getMaxUsesPerTurn(selectedAbility) : 0
             const usedKey = `${String((character as any)?.id ?? '')}:ability:${aid}`
             const used = toNum((perTurnUses as any)?.[usedKey] ?? 0)
-            const disabled = !selectedAbility || cdTurns > 0 || (limit > 0 && used >= limit)
+            const hasSpecifics = selectedAbility ? canConsumeSpecifics(selectedAbility) : true
+            const disabled = !selectedAbility || cdTurns > 0 || (limit > 0 && used >= limit) || !hasSpecifics
             return (
-              <Button onClick={() => { if (!selectedAbility || cdTurns > 0) return; if (limit > 0 && used >= limit) return; const lvl = toNum((selectedAbility as any)?.current_level || (selectedAbility as any)?.levels?.[0]?.level || 1); onConfirm?.({ ability: selectedAbility, level: lvl }); onOpenChange(false) }} disabled={disabled}>Seleziona</Button>
+              <Button onClick={() => { if (!selectedAbility || cdTurns > 0) return; if (limit > 0 && used >= limit) return; if (!hasSpecifics) return; const lvl = toNum((selectedAbility as any)?.current_level || (selectedAbility as any)?.levels?.[0]?.level || 1); onConfirm?.({ ability: selectedAbility, level: lvl }); onOpenChange(false) }} disabled={disabled}>Seleziona</Button>
             )
           })()}
         </DialogFooter>

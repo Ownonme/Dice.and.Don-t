@@ -34,6 +34,7 @@ import AnomalyModal from '@/components/character/modals/AnomalyModal';
 import { Badge } from '@/components/ui/badge';
 import { ABILITY_SECTIONS } from '@/constants/abilityConfig';
 import { X } from 'lucide-react';
+import { readSpecificCatalog, type CharacterSpecificCatalogItem } from '@/lib/utils';
 
 // Interfacce
 interface LevelDamageValue {
@@ -48,6 +49,36 @@ interface LevelPercentageDamageValue {
   typeName: string;
   guaranteed_percentage_damage: number;
   additional_percentage_damage: number;
+}
+interface CustomSpecificSelection {
+  id: string;
+  name: string;
+}
+interface PassiveConditionSpecificSelection {
+  id: string;
+  name: string;
+  kind: 'classic' | 'custom';
+  key: string;
+}
+interface LevelCustomSpecificValue {
+  id: string;
+  name: string;
+  value: number;
+}
+interface LevelCustomSpecificLimit {
+  id: string;
+  name: string;
+  max: number;
+}
+interface LevelPassiveSpecificCondition {
+  id: string;
+  name: string;
+  kind: 'classic' | 'custom';
+  key: string;
+  min_percent?: number;
+  max_percent?: number;
+  min_value?: number;
+  max_value?: number;
 }
 
 // Nuovo: rappresentazione dei campi di un singolo grado aggiuntivo
@@ -120,6 +151,11 @@ interface SpellLevel {
   damage_shape?: 'area' | 'cone' | 'single' | 'chain';
   area_or_cone_value?: number;
   chain_targets?: number;
+  consume_custom_specifics?: LevelCustomSpecificValue[];
+  generate_custom_specifics?: LevelCustomSpecificValue[];
+  passive_custom_specifics?: LevelCustomSpecificLimit[];
+  passive_condition_types?: string[];
+  passive_specific_conditions?: LevelPassiveSpecificCondition[];
   max_seconds?: number;
   pa_cost_per_second?: number;
   // nuovi campi esistenti
@@ -350,7 +386,7 @@ const MAGIC_BRANCHES = {
   'Trasmutazione': ['Trasmutazione', 'Elementale', 'Alterazione'],
   'Occulto': ['Ombra', 'Ossa', 'Sangue'],
   'Arcano': ['Caotico', 'Compresso'],
-  'Speciale': ['Draconico', 'Critico', 'Altro']
+  'Speciale': ['Draconico', 'Infernale', 'Critico', 'Altro']
 };
 const MAGIC_BRANCH_OPTIONS: string[] = Object.keys(MAGIC_BRANCHES).map((b) => b.toLowerCase().replace(/\s+/g, '_'));
 const COMPETENCE_OPTIONS: string[] = Array.from(new Set([
@@ -359,6 +395,25 @@ const COMPETENCE_OPTIONS: string[] = Array.from(new Set([
   ),
   ...MAGIC_BRANCH_OPTIONS,
 ]));
+
+const PASSIVE_CONDITION_TYPES = [
+  { id: 'specific_percent_lt', label: 'Specifica minore di %', mode: 'percent', dir: 'lt' },
+  { id: 'specific_percent_gt', label: 'Specifica maggiore di %', mode: 'percent', dir: 'gt' },
+  { id: 'specific_value_lt', label: 'Specifica minore di numerico', mode: 'value', dir: 'lt' },
+  { id: 'specific_value_gt', label: 'Specifica maggiore di numerico', mode: 'value', dir: 'gt' },
+];
+
+const PASSIVE_CLASSIC_SPECIFICS = [
+  { id: 'classic:hp', name: 'Punti vita', kind: 'classic' as const, key: 'hp' },
+  { id: 'classic:armor', name: 'Armatura', kind: 'classic' as const, key: 'armor' },
+  { id: 'classic:pa', name: 'Punti azione', kind: 'classic' as const, key: 'pa' },
+  ...STAT_OPTIONS.map((s) => ({
+    id: `classic:${s}`,
+    name: STAT_LABELS[s],
+    kind: 'classic' as const,
+    key: s,
+  })),
+];
 
 interface Spell {
   id: string;
@@ -446,6 +501,18 @@ interface SpellFormData {
   hasUsageInterval: boolean;
   hasMaxUsesPerTurn: boolean;
   hasSelfEffects: boolean;
+  consumeCustomSpecificsEnabled: boolean;
+  consumeCustomSpecifics: CustomSpecificSelection[];
+  generateCustomSpecificsEnabled: boolean;
+  generateCustomSpecifics: CustomSpecificSelection[];
+  immunityEnabled: boolean;
+  immunityTotal: boolean;
+  immunityAnomalies: { id: string; name: string }[];
+  immunityDamageEffects: { id: string; name: string }[];
+  passiveCustomSpecifics: CustomSpecificSelection[];
+  passiveConditionEnabled: boolean;
+  passiveConditionTypes: string[];
+  passiveConditionSpecifics: PassiveConditionSpecificSelection[];
   // selezione multipla degli effetti di autodanno (generale)
   selfDamageEffects: { name: string; mode?: 'classic' | 'percentage' }[];
   // Fallimento (generale)
@@ -510,6 +577,11 @@ const createDefaultLevel = (level: number): SpellLevel => ({
   max_targets: 0,
   usage_interval_turns: 0,
   max_uses_per_turn: 0,
+  consume_custom_specifics: [],
+  generate_custom_specifics: [],
+  passive_custom_specifics: [],
+  passive_condition_types: [],
+  passive_specific_conditions: [],
   no_damage_turn_increase_values: [],
   activation_delay_turns: 0,
   knockback_meters: 0,
@@ -740,6 +812,57 @@ const pruneSpellLevelPayload = (level: any): any => {
   if (Array.isArray(out.scaled_move_stats) && out.scaled_move_stats.length === 0) delete out.scaled_move_stats;
   if (Array.isArray(out.scaled_move_skills) && out.scaled_move_skills.length === 0) delete out.scaled_move_skills;
   if (Array.isArray(out.removed_anomalies) && out.removed_anomalies.length === 0) delete out.removed_anomalies;
+  if (Array.isArray(out.consume_custom_specifics)) {
+    out.consume_custom_specifics = out.consume_custom_specifics
+      .map((s: any) => ({
+        id: (s?.id ?? '').toString(),
+        name: (s?.name ?? '').toString(),
+        value: typeof s?.value === 'number' ? s.value : Number(s?.value) || 0,
+      }))
+      .filter((s: any) => !!s.id || !!s.name);
+    if (out.consume_custom_specifics.length === 0) delete out.consume_custom_specifics;
+  }
+  if (Array.isArray(out.generate_custom_specifics)) {
+    out.generate_custom_specifics = out.generate_custom_specifics
+      .map((s: any) => ({
+        id: (s?.id ?? '').toString(),
+        name: (s?.name ?? '').toString(),
+        value: typeof s?.value === 'number' ? s.value : Number(s?.value) || 0,
+      }))
+      .filter((s: any) => !!s.id || !!s.name);
+    if (out.generate_custom_specifics.length === 0) delete out.generate_custom_specifics;
+  }
+  if (Array.isArray(out.passive_custom_specifics)) {
+    out.passive_custom_specifics = out.passive_custom_specifics
+      .map((s: any) => ({
+        id: (s?.id ?? '').toString(),
+        name: (s?.name ?? '').toString(),
+        max: typeof s?.max === 'number' ? s.max : Number(s?.max) || 0,
+      }))
+      .filter((s: any) => !!s.id || !!s.name);
+    if (out.passive_custom_specifics.length === 0) delete out.passive_custom_specifics;
+  }
+  if (Array.isArray(out.passive_condition_types)) {
+    out.passive_condition_types = out.passive_condition_types
+      .map((t: any) => (t ?? '').toString().trim())
+      .filter((t: string) => !!t);
+    if (out.passive_condition_types.length === 0) delete out.passive_condition_types;
+  }
+  if (Array.isArray(out.passive_specific_conditions)) {
+    out.passive_specific_conditions = out.passive_specific_conditions
+      .map((s: any) => ({
+        id: (s?.id ?? '').toString(),
+        name: (s?.name ?? '').toString(),
+        kind: (s?.kind === 'classic' ? 'classic' : 'custom') as 'classic' | 'custom',
+        key: (s?.key ?? '').toString(),
+        min_percent: typeof s?.min_percent === 'number' ? s.min_percent : Number(s?.min_percent) || 0,
+        max_percent: typeof s?.max_percent === 'number' ? s.max_percent : Number(s?.max_percent) || 0,
+        min_value: typeof s?.min_value === 'number' ? s.min_value : Number(s?.min_value) || 0,
+        max_value: typeof s?.max_value === 'number' ? s.max_value : Number(s?.max_value) || 0,
+      }))
+      .filter((s: any) => !!s.id || !!s.name || !!s.key);
+    if (out.passive_specific_conditions.length === 0) delete out.passive_specific_conditions;
+  }
 
   if (!out.max_multiple_attacks) delete out.max_multiple_attacks;
   if (!out.min_success_percentage) delete out.min_success_percentage;
@@ -916,10 +1039,12 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
   const [anomalyOptions, setAnomalyOptions] = useState<string[]>(['Nessuna']);
+  const [anomalyOptionsWithId, setAnomalyOptionsWithId] = useState<Array<{ id: string; name: string }>>([]);
   const [anomalyLoading, setAnomalyLoading] = useState(false);
 
   const [damageEffectOptions, setDamageEffectOptions] = useState<{ id: string; name: string }[]>([]);
   const [damageEffectLoading, setDamageEffectLoading] = useState(false);
+  const [specificCatalog, setSpecificCatalog] = useState<CharacterSpecificCatalogItem[]>(() => readSpecificCatalog());
 
   const form = useForm<SpellFormData>({
     defaultValues: {
@@ -961,6 +1086,18 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
       hasUsageInterval: false,
       hasMaxUsesPerTurn: false,
       hasSelfEffects: false,
+      consumeCustomSpecificsEnabled: false,
+      consumeCustomSpecifics: [],
+      generateCustomSpecificsEnabled: false,
+      generateCustomSpecifics: [],
+      immunityEnabled: false,
+      immunityTotal: false,
+      immunityAnomalies: [],
+      immunityDamageEffects: [],
+      passiveCustomSpecifics: [],
+      passiveConditionEnabled: false,
+      passiveConditionTypes: [],
+      passiveConditionSpecifics: [],
       selfDamageEffects: [],
       // evocazione
       evocationEnabled: false,
@@ -1020,6 +1157,36 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
     name: 'failureDamageEffects'
   });
 
+  const { fields: consumeSpecificFields, append: appendConsumeSpecific, remove: removeConsumeSpecific, replace: replaceConsumeSpecifics } = useFieldArray({
+    control,
+    name: 'consumeCustomSpecifics'
+  });
+
+  const { fields: generateSpecificFields, append: appendGenerateSpecific, remove: removeGenerateSpecific, replace: replaceGenerateSpecifics } = useFieldArray({
+    control,
+    name: 'generateCustomSpecifics'
+  });
+
+  const { fields: immunityAnomalyFields, append: appendImmunityAnomaly, remove: removeImmunityAnomaly, replace: replaceImmunityAnomalies } = useFieldArray({
+    control,
+    name: 'immunityAnomalies'
+  });
+
+  const { fields: immunityDamageEffectFields, append: appendImmunityDamageEffect, remove: removeImmunityDamageEffect, replace: replaceImmunityDamageEffects } = useFieldArray({
+    control,
+    name: 'immunityDamageEffects'
+  });
+
+  const { fields: passiveCustomSpecificFields, append: appendPassiveCustomSpecific, remove: removePassiveCustomSpecific, replace: replacePassiveCustomSpecifics } = useFieldArray({
+    control,
+    name: 'passiveCustomSpecifics'
+  });
+
+  const { fields: passiveConditionSpecificFields, append: appendPassiveConditionSpecific, remove: removePassiveConditionSpecific, replace: replacePassiveConditionSpecifics } = useFieldArray({
+    control,
+    name: 'passiveConditionSpecifics'
+  });
+
   useEffect(() => {
     const loadAnomalies = async () => {
       setAnomalyLoading(true);
@@ -1028,10 +1195,12 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
         const names = (list || []).map((a: { id: string; name: string }) => a.name).filter(Boolean);
         const uniq = Array.from(new Set(['Nessuna', ...names]));
         setAnomalyOptions(uniq);
+        setAnomalyOptionsWithId((list || []).map((a: { id: string; name: string }) => ({ id: String(a.id || ''), name: String(a.name || '') })).filter((a: any) => a.id || a.name));
       } catch (err) {
         console.error('Errore caricando anomalie:', err);
         toast({ title: 'Errore', description: 'Impossibile caricare le anomalie', variant: 'destructive' });
         setAnomalyOptions(['Nessuna']);
+        setAnomalyOptionsWithId([]);
       } finally {
         setAnomalyLoading(false);
       }
@@ -1055,6 +1224,11 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
     };
     if (isOpen) loadDamageEffects();
   }, [isOpen, toast]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSpecificCatalog(readSpecificCatalog());
+  }, [isOpen]);
 
   const watchedPrimaryBranch = watch('primaryBranch');
   const watchedSecondaryBranch = watch('secondaryBranch');
@@ -1082,6 +1256,8 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
   const watchedSelfAnomalyEnabled = watch('selfAnomalyEnabled');
   const watchedPassiveAnomalyEnabled = watch('passiveAnomalyEnabled');
   const watchedRemoveAnomalyEnabled = watch('removeAnomalyEnabled');
+  const watchedImmunityEnabled = watch('immunityEnabled');
+  const watchedImmunityTotal = watch('immunityTotal');
   const watchedExtraCostEnabled = watch('extraCostEnabled');
   const watchedPaInvestmentEnabled = watch('paInvestmentEnabled');
   const watchedDamageIncreasePerPaEnabled = watch('damageIncreasePerPaEnabled');
@@ -1093,6 +1269,14 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
   const watchedHasUsageInterval = watch('hasUsageInterval');
   const watchedHasMaxUsesPerTurn = watch('hasMaxUsesPerTurn');
   const watchedHasSelfEffects = watch('hasSelfEffects');
+  const watchedConsumeCustomSpecificsEnabled = watch('consumeCustomSpecificsEnabled');
+  const watchedConsumeCustomSpecifics = watch('consumeCustomSpecifics');
+  const watchedGenerateCustomSpecificsEnabled = watch('generateCustomSpecificsEnabled');
+  const watchedGenerateCustomSpecifics = watch('generateCustomSpecifics');
+  const watchedPassiveCustomSpecifics = watch('passiveCustomSpecifics');
+  const watchedPassiveConditionEnabled = watch('passiveConditionEnabled');
+  const watchedPassiveConditionTypes = watch('passiveConditionTypes');
+  const watchedPassiveConditionSpecifics = watch('passiveConditionSpecifics');
   const watchedSelfDamageEffects = watch('selfDamageEffects');
   const watchedPercentageDamageEffects = watch('percentageDamageEffects');
   // evocazione
@@ -1107,6 +1291,17 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
   const watchedDifficulty = watch('difficulty');
   const [levelStatsQueries, setLevelStatsQueries] = useState<Record<number, string>>({});
   const [levelSkillsQueries, setLevelSkillsQueries] = useState<Record<number, string>>({});
+
+  useEffect(() => {
+    if (watchedType !== 'Passiva') {
+      setValue('passiveAnomalyEnabled', false, { shouldDirty: true });
+      setValue('passiveAnomalyAlwaysActive', false, { shouldDirty: true });
+      setValue('passiveConditionEnabled', false, { shouldDirty: true });
+      setValue('passiveConditionTypes', [], { shouldDirty: true });
+      setValue('passiveConditionSpecifics', [], { shouldDirty: true });
+      setValue('passiveCustomSpecifics', [], { shouldDirty: true });
+    }
+  }, [watchedType, setValue]);
 
   // Evocazioni da Supabase (STATE + HELPERS) — devono stare DENTRO al componente
   const [evocationList, setEvocationList] = useState<Array<{ id: string; name: string; evocation_type: 'weapon' | 'entity' | 'replica' }>>([]);
@@ -1525,6 +1720,22 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
       setValue('additionalDescription', editSpell.additional_description);
       setValue('story1', editSpell.story1 || '');
       setValue('story2', editSpell.story2 || '');
+      const immunityTotal = !!((editSpell as any).immunity_total ?? (editSpell as any).immunityTotal);
+      const immunityAnomsRaw = Array.isArray((editSpell as any).immunity_anomalies) ? (editSpell as any).immunity_anomalies : [];
+      const immunityEffectsRaw = Array.isArray((editSpell as any).immunity_damage_effects) ? (editSpell as any).immunity_damage_effects : [];
+      const immunityAnoms = immunityAnomsRaw.map((a: any) => ({
+        id: String(a?.id ?? '').trim(),
+        name: String(a?.name ?? a ?? '').trim(),
+      })).filter((a: any) => a.id || a.name);
+      const immunityEffects = immunityEffectsRaw.map((e: any) => ({
+        id: String(e?.id ?? '').trim(),
+        name: String(e?.name ?? e ?? '').trim(),
+      })).filter((e: any) => e.id || e.name);
+      const immunityEnabled = immunityTotal || immunityAnoms.length > 0 || immunityEffects.length > 0;
+      setValue('immunityEnabled', immunityEnabled);
+      setValue('immunityTotal', immunityTotal);
+      replaceImmunityAnomalies(immunityAnoms);
+      replaceImmunityDamageEffects(immunityEffects);
       if (editSpell.levels) {
         // Applica valori di default se mancanti anche per la forma del danno e nuovi campi di livello
         const sourceLevels = Array.isArray(editSpell.levels) ? editSpell.levels : [];
@@ -1542,6 +1753,27 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
               : Number((lvl as any).less_health_more_damage_every_hp ?? (lvl as any).lessHealthMoreDamageEveryHp) || 0,
             area_or_cone_value: typeof lvl.area_or_cone_value === 'number' ? lvl.area_or_cone_value : 0,
             chain_targets: typeof lvl.chain_targets === 'number' ? lvl.chain_targets : 1,
+            consume_custom_specifics: Array.isArray((lvl as any).consume_custom_specifics)
+              ? ((lvl as any).consume_custom_specifics as any[]).map((s: any) => ({
+                  id: (s?.id ?? '').toString(),
+                  name: (s?.name ?? '').toString(),
+                  value: typeof s?.value === 'number' ? s.value : Number(s?.value) || 0,
+                }))
+              : [],
+            generate_custom_specifics: Array.isArray((lvl as any).generate_custom_specifics)
+              ? ((lvl as any).generate_custom_specifics as any[]).map((s: any) => ({
+                  id: (s?.id ?? '').toString(),
+                  name: (s?.name ?? '').toString(),
+                  value: typeof s?.value === 'number' ? s.value : Number(s?.value) || 0,
+                }))
+              : [],
+            passive_custom_specifics: Array.isArray((lvl as any).passive_custom_specifics)
+              ? ((lvl as any).passive_custom_specifics as any[]).map((s: any) => ({
+                  id: (s?.id ?? '').toString(),
+                  name: (s?.name ?? '').toString(),
+                  max: typeof s?.max === 'number' ? s.max : Number(s?.max) || 0,
+                }))
+              : [],
             max_seconds: typeof lvl.max_seconds === 'number' ? lvl.max_seconds : 0,
             pa_cost_per_second: typeof lvl.pa_cost_per_second === 'number' ? lvl.pa_cost_per_second : 0,
             increasing_damage_per_second: typeof lvl.increasing_damage_per_second === 'number' ? lvl.increasing_damage_per_second : 0,
@@ -1785,6 +2017,83 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
           setValue('hasSelfEffects', anySelf, { shouldDirty: true });
         }
 
+        const consumeSet = new Map<string, { id: string; name: string }>();
+        const generateSet = new Map<string, { id: string; name: string }>();
+        const passiveCustomSet = new Map<string, { id: string; name: string }>();
+        const passiveSpecificSet = new Map<string, { id: string; name: string; kind: 'classic' | 'custom'; key: string }>();
+        const passiveTypeSet = new Set<string>();
+        editSpell.levels.forEach((lvl: any) => {
+          const consumeArr = Array.isArray((lvl as any).consume_custom_specifics) ? (lvl as any).consume_custom_specifics : [];
+          const generateArr = Array.isArray((lvl as any).generate_custom_specifics) ? (lvl as any).generate_custom_specifics : [];
+          const passiveCustomArr = Array.isArray((lvl as any).passive_custom_specifics) ? (lvl as any).passive_custom_specifics : [];
+          consumeArr.forEach((s: any) => {
+            const id = (s?.id ?? '').toString();
+            const name = (s?.name ?? '').toString();
+            if (id || name) consumeSet.set(id || name, { id, name });
+          });
+          generateArr.forEach((s: any) => {
+            const id = (s?.id ?? '').toString();
+            const name = (s?.name ?? '').toString();
+            if (id || name) generateSet.set(id || name, { id, name });
+          });
+          passiveCustomArr.forEach((s: any) => {
+            const id = (s?.id ?? '').toString();
+            const name = (s?.name ?? '').toString();
+            if (id || name) passiveCustomSet.set(id || name, { id, name });
+          });
+          (Array.isArray((lvl as any).passive_condition_types) ? (lvl as any).passive_condition_types : []).forEach((t: any) => {
+            const id = (t ?? '').toString();
+            if (id) passiveTypeSet.add(id);
+          });
+          (Array.isArray((lvl as any).passive_specific_conditions) ? (lvl as any).passive_specific_conditions : []).forEach((s: any) => {
+            const id = (s?.id ?? '').toString();
+            const name = (s?.name ?? '').toString();
+            const kind = (s?.kind === 'classic' ? 'classic' : 'custom') as 'classic' | 'custom';
+            const key = (s?.key ?? '').toString();
+            if (id || name || key) passiveSpecificSet.set(id || key || name, { id, name, kind, key });
+          });
+        });
+        const derivedConsumeSpecifics = Array.from(consumeSet.values());
+        const derivedGenerateSpecifics = Array.from(generateSet.values());
+        const derivedPassiveCustomSpecifics = Array.from(passiveCustomSet.values());
+        if (derivedConsumeSpecifics.length > 0) {
+          replaceConsumeSpecifics(derivedConsumeSpecifics);
+          setValue('consumeCustomSpecificsEnabled', true, { shouldDirty: true });
+        } else {
+          replaceConsumeSpecifics([]);
+          const anyConsume = editSpell.levels?.some((lvl: any) => Array.isArray((lvl as any).consume_custom_specifics) && (lvl as any).consume_custom_specifics.length > 0) ?? false;
+          setValue('consumeCustomSpecificsEnabled', anyConsume, { shouldDirty: true });
+        }
+        if (derivedGenerateSpecifics.length > 0) {
+          replaceGenerateSpecifics(derivedGenerateSpecifics);
+          setValue('generateCustomSpecificsEnabled', true, { shouldDirty: true });
+        } else {
+          replaceGenerateSpecifics([]);
+          const anyGenerate = editSpell.levels?.some((lvl: any) => Array.isArray((lvl as any).generate_custom_specifics) && (lvl as any).generate_custom_specifics.length > 0) ?? false;
+          setValue('generateCustomSpecificsEnabled', anyGenerate, { shouldDirty: true });
+        }
+        if (derivedPassiveCustomSpecifics.length > 0) {
+          replacePassiveCustomSpecifics(derivedPassiveCustomSpecifics);
+        } else {
+          replacePassiveCustomSpecifics([]);
+        }
+        const derivedPassiveSpecifics = Array.from(passiveSpecificSet.values());
+        if (derivedPassiveSpecifics.length > 0 && passiveTypeSet.size > 0) {
+          replacePassiveConditionSpecifics(derivedPassiveSpecifics);
+          setValue('passiveConditionTypes', Array.from(passiveTypeSet.values()), { shouldDirty: true });
+          setValue('passiveConditionEnabled', true, { shouldDirty: true });
+        } else {
+          replacePassiveConditionSpecifics([]);
+          setValue('passiveConditionTypes', [], { shouldDirty: true });
+          const anyPassiveCondition = editSpell.levels?.some((lvl: any) =>
+            Array.isArray((lvl as any).passive_specific_conditions) &&
+            (lvl as any).passive_specific_conditions.length > 0 &&
+            Array.isArray((lvl as any).passive_condition_types) &&
+            (lvl as any).passive_condition_types.length > 0
+          ) ?? false;
+          setValue('passiveConditionEnabled', anyPassiveCondition, { shouldDirty: true });
+        }
+
         // Deriva effetti percentuali dai livelli
         const percSet = new Set<string>();
         editSpell.levels.forEach((lvl: any) => {
@@ -1929,7 +2238,7 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
     } else {
       reset();
     }
-  }, [mode, editSpell, setValue, reset, replaceLevels, replaceDamageTypes, replaceSelfDamageEffects, replacePercentageDamageEffects, replaceFailureDamageEffects]);
+  }, [mode, editSpell, setValue, reset, replaceLevels, replaceDamageTypes, replaceSelfDamageEffects, replacePercentageDamageEffects, replaceFailureDamageEffects, replaceConsumeSpecifics, replaceGenerateSpecifics, replaceImmunityAnomalies, replaceImmunityDamageEffects, replacePassiveCustomSpecifics, replacePassiveConditionSpecifics]);
 
   useEffect(() => {
     if (!watchedPassiveAnomalyEnabled) {
@@ -2160,6 +2469,118 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
     });
   }, [watchedSelfDamageEffects, watchedHasSelfEffects, watchedLevels, setValue]);
 
+  useEffect(() => {
+    const levels = Array.isArray(watchedLevels) ? watchedLevels : [];
+    const selections = Array.isArray(watchedConsumeCustomSpecifics) ? watchedConsumeCustomSpecifics : [];
+    if (!watchedConsumeCustomSpecificsEnabled || selections.length === 0) {
+      levels.forEach((_, idx) => {
+        setValue(`levels.${idx}.consume_custom_specifics`, [], { shouldDirty: true });
+      });
+      return;
+    }
+    levels.forEach((lvl, idx) => {
+      const existing: any[] = Array.isArray((lvl as any)?.consume_custom_specifics) ? ((lvl as any).consume_custom_specifics as any[]) : [];
+      const next = selections.map((s: any) => {
+        const id = (s?.id ?? '').toString();
+        const name = (s?.name ?? '').toString();
+        const found = existing.find((e: any) => (e?.id === id) || ((e?.name ?? '') === name)) || {};
+        return {
+          id,
+          name,
+          value: typeof found?.value === 'number' ? found.value : Number(found?.value) || 0,
+        };
+      });
+      setValue(`levels.${idx}.consume_custom_specifics`, next, { shouldDirty: true });
+    });
+  }, [watchedConsumeCustomSpecificsEnabled, watchedConsumeCustomSpecifics, watchedLevels, setValue]);
+
+  useEffect(() => {
+    const levels = Array.isArray(watchedLevels) ? watchedLevels : [];
+    const selections = Array.isArray(watchedGenerateCustomSpecifics) ? watchedGenerateCustomSpecifics : [];
+    if (!watchedGenerateCustomSpecificsEnabled || selections.length === 0) {
+      levels.forEach((_, idx) => {
+        setValue(`levels.${idx}.generate_custom_specifics`, [], { shouldDirty: true });
+      });
+      return;
+    }
+    levels.forEach((lvl, idx) => {
+      const existing: any[] = Array.isArray((lvl as any)?.generate_custom_specifics) ? ((lvl as any).generate_custom_specifics as any[]) : [];
+      const next = selections.map((s: any) => {
+        const id = (s?.id ?? '').toString();
+        const name = (s?.name ?? '').toString();
+        const found = existing.find((e: any) => (e?.id === id) || ((e?.name ?? '') === name)) || {};
+        return {
+          id,
+          name,
+          value: typeof found?.value === 'number' ? found.value : Number(found?.value) || 0,
+        };
+      });
+      setValue(`levels.${idx}.generate_custom_specifics`, next, { shouldDirty: true });
+    });
+  }, [watchedGenerateCustomSpecificsEnabled, watchedGenerateCustomSpecifics, watchedLevels, setValue]);
+
+  useEffect(() => {
+    const levels = Array.isArray(watchedLevels) ? watchedLevels : [];
+    const selections = Array.isArray(watchedPassiveCustomSpecifics) ? watchedPassiveCustomSpecifics : [];
+    if (watchedType !== 'Passiva' || selections.length === 0) {
+      levels.forEach((_, idx) => {
+        setValue(`levels.${idx}.passive_custom_specifics`, [], { shouldDirty: true });
+      });
+      return;
+    }
+    levels.forEach((lvl, idx) => {
+      const existing: any[] = Array.isArray((lvl as any)?.passive_custom_specifics) ? ((lvl as any).passive_custom_specifics as any[]) : [];
+      const next = selections.map((s: any) => {
+        const id = (s?.id ?? '').toString();
+        const name = (s?.name ?? '').toString();
+        const found = existing.find((e: any) => (e?.id === id) || ((e?.name ?? '') === name)) || {};
+        return {
+          id,
+          name,
+          max: typeof found?.max === 'number' ? found.max : Number(found?.max) || 0,
+        };
+      });
+      setValue(`levels.${idx}.passive_custom_specifics`, next, { shouldDirty: true });
+    });
+  }, [watchedType, watchedPassiveCustomSpecifics, watchedLevels, setValue]);
+
+  useEffect(() => {
+    const levels = Array.isArray(watchedLevels) ? watchedLevels : [];
+    const selections = Array.isArray(watchedPassiveConditionSpecifics) ? watchedPassiveConditionSpecifics : [];
+    const types = Array.isArray(watchedPassiveConditionTypes) ? watchedPassiveConditionTypes : [];
+    if (watchedType !== 'Passiva' || !watchedPassiveConditionEnabled || selections.length === 0 || types.length === 0) {
+      levels.forEach((_, idx) => {
+        setValue(`levels.${idx}.passive_condition_types`, [], { shouldDirty: true });
+        setValue(`levels.${idx}.passive_specific_conditions`, [], { shouldDirty: true });
+      });
+      return;
+    }
+    levels.forEach((lvl, idx) => {
+      const existing: any[] = Array.isArray((lvl as any)?.passive_specific_conditions)
+        ? ((lvl as any).passive_specific_conditions as any[])
+        : [];
+      const next = selections.map((s: any) => {
+        const id = (s?.id ?? '').toString();
+        const name = (s?.name ?? '').toString();
+        const kind = (s?.kind === 'classic' ? 'classic' : 'custom') as 'classic' | 'custom';
+        const key = (s?.key ?? '').toString();
+        const found = existing.find((e: any) => (e?.id === id) || ((e?.name ?? '') === name) || ((e?.key ?? '') === key)) || {};
+        return {
+          id,
+          name,
+          kind,
+          key,
+          min_percent: typeof found?.min_percent === 'number' ? found.min_percent : Number(found?.min_percent) || 0,
+          max_percent: typeof found?.max_percent === 'number' ? found.max_percent : Number(found?.max_percent) || 0,
+          min_value: typeof found?.min_value === 'number' ? found.min_value : Number(found?.min_value) || 0,
+          max_value: typeof found?.max_value === 'number' ? found.max_value : Number(found?.max_value) || 0,
+        };
+      });
+      setValue(`levels.${idx}.passive_condition_types`, types, { shouldDirty: true });
+      setValue(`levels.${idx}.passive_specific_conditions`, next, { shouldDirty: true });
+    });
+  }, [watchedPassiveConditionEnabled, watchedPassiveConditionTypes, watchedPassiveConditionSpecifics, watchedType, watchedLevels, setValue]);
+
   // Nuovo: sincronizza "Fallimento" generale su tutti i livelli e pulizia quando disattivo
   useEffect(() => {
     const levels = Array.isArray(watchedLevels) ? watchedLevels : [];
@@ -2343,6 +2764,16 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
       });
     }
   }, [watchedPassiveAnomalyEnabled, watchedType, watchedLevels, setValue]);
+
+  useEffect(() => {
+    const levels = Array.isArray(watchedLevels) ? watchedLevels : [];
+    if (watchedType !== 'Passiva' || !watchedPassiveConditionEnabled) {
+      levels.forEach((_, idx) => {
+        setValue(`levels.${idx}.passive_condition_types`, [], { shouldDirty: true });
+        setValue(`levels.${idx}.passive_specific_conditions`, [], { shouldDirty: true });
+      });
+    }
+  }, [watchedPassiveConditionEnabled, watchedType, watchedLevels, setValue]);
 
   useEffect(() => {
     const levels = Array.isArray(watchedLevels) ? watchedLevels : [];
@@ -2643,23 +3074,28 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
         ? `${data.secondaryBranch}_${data.secondarySpecificity}_${data.grade}`
         : null;
 
-      const spellPayload = {
-        name: safeTrim(data.name),
-        type: data.type,
-        primary_branch: data.primaryBranch,
-        secondary_branch: data.secondaryBranch === 'none' ? null : data.secondaryBranch,
-        primary_specificity: data.primarySpecificity,
-        secondary_specificity: data.secondarySpecificity || null,
-        grade: data.grade,
-        category: primaryCategory,
-        secondary_category: secondaryCategory,
-        description: safeTrim(data.description),
-        additional_description: safeTrim(data.additionalDescription),
-        story_1: safeTrim(data.story1) || null,
-        story_2: safeTrim(data.story2) || null,
-        difficulty: Number(data.difficulty || 1) || 1,
-        // Normalizza i livelli e rimuove i campi legacy dei gradi
-        levels: (Array.isArray(data.levels) ? data.levels : []).map((lvl) => {
+      const aggregateSpecifics = (levels: any[], key: string, valueKey: 'value' | 'max') => {
+        const map = new Map<string, { id: string; name: string; [k: string]: number }>();
+        (Array.isArray(levels) ? levels : []).forEach((lvl) => {
+          const list = Array.isArray((lvl as any)?.[key]) ? (lvl as any)[key] : [];
+          list.forEach((s: any) => {
+            const id = String(s?.id ?? '').trim();
+            const name = String(s?.name ?? '').trim();
+            const mapKey = id || name;
+            if (!mapKey) return;
+            const value = Number(s?.[valueKey]) || 0;
+            const prev = map.get(mapKey);
+            map.set(mapKey, {
+              id: id || (prev?.id ?? ''),
+              name: name || (prev?.name ?? ''),
+              [valueKey]: Math.max(Number(prev?.[valueKey]) || 0, value),
+            });
+          });
+        });
+        return Array.from(map.values());
+      };
+
+      const levelsPayload = (Array.isArray(data.levels) ? data.levels : []).map((lvl) => {
           const {
             grade1_enabled,
             grade1_effects,
@@ -3100,6 +3536,68 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
               )
             : [];
 
+          const consumeSelections = Array.isArray((data as any).consumeCustomSpecifics)
+            ? ((data as any).consumeCustomSpecifics as any[])
+                .map((s: any) => ({
+                  id: (s?.id ?? '').toString(),
+                  name: (s?.name ?? '').toString(),
+                }))
+                .filter((s: any) => !!s.id || !!s.name)
+            : [];
+          const generateSelections = Array.isArray((data as any).generateCustomSpecifics)
+            ? ((data as any).generateCustomSpecifics as any[])
+                .map((s: any) => ({
+                  id: (s?.id ?? '').toString(),
+                  name: (s?.name ?? '').toString(),
+                }))
+                .filter((s: any) => !!s.id || !!s.name)
+            : [];
+          const passiveCustomSelections = Array.isArray((data as any).passiveCustomSpecifics)
+            ? ((data as any).passiveCustomSpecifics as any[])
+                .map((s: any) => ({
+                  id: (s?.id ?? '').toString(),
+                  name: (s?.name ?? '').toString(),
+                }))
+                .filter((s: any) => !!s.id || !!s.name)
+            : [];
+
+          const normalizeLevelSpecifics = (list: any[], key: 'value' | 'max', selections?: any[]) => {
+            const raw = Array.isArray(list) ? list : [];
+            const filtered = Array.isArray(selections) && selections.length > 0
+              ? raw.filter((r: any) => selections.some((s: any) => (s?.id && s.id === r?.id) || (s?.name && s.name === r?.name)))
+              : raw;
+            return filtered
+              .map((r: any) => ({
+                id: (r?.id ?? '').toString(),
+                name: (r?.name ?? '').toString(),
+                [key]: typeof r?.[key] === 'number' ? r[key] : Number(r?.[key]) || 0,
+              }))
+              .filter((r: any) => !!r.id || !!r.name);
+          };
+          const levelConsumeSpecifics = (data as any).consumeCustomSpecificsEnabled
+            ? normalizeLevelSpecifics((lvlRest as any).consume_custom_specifics, 'value', consumeSelections)
+            : [];
+          const levelGenerateSpecifics = (data as any).generateCustomSpecificsEnabled
+            ? normalizeLevelSpecifics((lvlRest as any).generate_custom_specifics, 'value', generateSelections)
+            : [];
+          const levelPassiveCustomSpecifics = (data as any).type === 'Passiva'
+            ? normalizeLevelSpecifics((lvlRest as any).passive_custom_specifics, 'max', passiveCustomSelections)
+            : [];
+          const levelPassiveSpecifics = (data as any).passiveConditionEnabled
+            ? (Array.isArray((lvlRest as any).passive_specific_conditions) ? (lvlRest as any).passive_specific_conditions : [])
+                .filter((s: any) => ((s?.id ?? '').toString().trim().length > 0) || ((s?.name ?? '').toString().trim().length > 0) || ((s?.key ?? '').toString().trim().length > 0))
+                .map((s: any) => ({
+                  id: (s?.id ?? '').toString(),
+                  name: (s?.name ?? '').toString(),
+                  kind: (s?.kind === 'classic' ? 'classic' : 'custom') as 'classic' | 'custom',
+                  key: (s?.key ?? '').toString(),
+                  min_percent: typeof s?.min_percent === 'number' ? s.min_percent : Number(s?.min_percent) || 0,
+                  max_percent: typeof s?.max_percent === 'number' ? s.max_percent : Number(s?.max_percent) || 0,
+                  min_value: typeof s?.min_value === 'number' ? s.min_value : Number(s?.min_value) || 0,
+                  max_value: typeof s?.max_value === 'number' ? s.max_value : Number(s?.max_value) || 0,
+                }))
+            : [];
+
           const levelPayload = {
             level: Number(lvlRest.level) || 0,
             damage_values,
@@ -3118,6 +3616,11 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
             damage_shape: lvlRest.damage_shape,
             area_or_cone_value: Number(lvlRest.area_or_cone_value) || 0,
             chain_targets: Number(lvlRest.chain_targets) || 0,
+            consume_custom_specifics: levelConsumeSpecifics,
+            generate_custom_specifics: levelGenerateSpecifics,
+            passive_custom_specifics: levelPassiveCustomSpecifics,
+            passive_condition_types: (data as any).passiveConditionEnabled ? (Array.isArray((lvlRest as any).passive_condition_types) ? (lvlRest as any).passive_condition_types : []) : [],
+            passive_specific_conditions: levelPassiveSpecifics,
             max_seconds: Number(lvlRest.max_seconds) || 0,
             pa_cost_per_second: Number(lvlRest.pa_cost_per_second) || 0,
             increasing_damage_per_second: Number(lvlRest.increasing_damage_per_second) || 0,
@@ -3393,10 +3896,66 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
                   sourceId: (a?.sourceId ?? a?.source_id) || undefined,
                 }))
               : [],
+            passive_condition_types: (data.type === 'Passiva' && !!(data as any).passiveConditionEnabled)
+              ? (Array.isArray((lvlRest as any).passive_condition_types) ? (lvlRest as any).passive_condition_types : [])
+                  .map((t: any) => (t ?? '').toString().trim())
+                  .filter((t: string) => !!t)
+              : [],
+            passive_specific_conditions: (data.type === 'Passiva' && !!(data as any).passiveConditionEnabled)
+              ? (Array.isArray((lvlRest as any).passive_specific_conditions) ? (lvlRest as any).passive_specific_conditions : [])
+                  .filter((s: any) => ((s?.id ?? '').toString().trim().length > 0) || ((s?.name ?? '').toString().trim().length > 0) || ((s?.key ?? '').toString().trim().length > 0))
+                  .map((s: any) => ({
+                    id: (s?.id ?? '').toString(),
+                    name: (s?.name ?? '').toString(),
+                    kind: (s?.kind === 'classic' ? 'classic' : 'custom') as 'classic' | 'custom',
+                    key: (s?.key ?? '').toString(),
+                    min_percent: typeof s?.min_percent === 'number' ? s.min_percent : Number(s?.min_percent) || 0,
+                    max_percent: typeof s?.max_percent === 'number' ? s.max_percent : Number(s?.max_percent) || 0,
+                    min_value: typeof s?.min_value === 'number' ? s.min_value : Number(s?.min_value) || 0,
+                    max_value: typeof s?.max_value === 'number' ? s.max_value : Number(s?.max_value) || 0,
+                  }))
+              : [],
           };
 
           return pruneSpellLevelPayload(levelPayload);
-        }),
+        });
+      const aggregatedConsumeSpecifics = aggregateSpecifics(levelsPayload, 'consume_custom_specifics', 'value');
+      const aggregatedGenerateSpecifics = aggregateSpecifics(levelsPayload, 'generate_custom_specifics', 'value');
+      const aggregatedPassiveSpecifics = aggregateSpecifics(levelsPayload, 'passive_custom_specifics', 'max');
+      const immunityTotal = data.immunityEnabled ? !!data.immunityTotal : false;
+      const immunityAnomalies = data.immunityEnabled && !immunityTotal
+        ? (Array.isArray(data.immunityAnomalies) ? data.immunityAnomalies : []).map((a) => ({
+            id: String((a as any)?.id ?? '').trim(),
+            name: String((a as any)?.name ?? '').trim(),
+          })).filter((a: any) => a.id || a.name)
+        : [];
+      const immunityDamageEffects = data.immunityEnabled && !immunityTotal
+        ? (Array.isArray(data.immunityDamageEffects) ? data.immunityDamageEffects : []).map((e) => ({
+            id: String((e as any)?.id ?? '').trim(),
+            name: String((e as any)?.name ?? '').trim(),
+          })).filter((e: any) => e.id || e.name)
+        : [];
+
+      const spellPayload = {
+        name: safeTrim(data.name),
+        type: data.type,
+        primary_branch: data.primaryBranch,
+        secondary_branch: data.secondaryBranch === 'none' ? null : data.secondaryBranch,
+        primary_specificity: data.primarySpecificity,
+        secondary_specificity: data.secondarySpecificity || null,
+        grade: data.grade,
+        category: primaryCategory,
+        secondary_category: secondaryCategory,
+        description: safeTrim(data.description),
+        additional_description: safeTrim(data.additionalDescription),
+        story_1: safeTrim(data.story1) || null,
+        story_2: safeTrim(data.story2) || null,
+        difficulty: Number(data.difficulty || 1) || 1,
+        levels: levelsPayload,
+        ...(aggregatedConsumeSpecifics.length > 0 ? { consume_custom_specifics: aggregatedConsumeSpecifics } : {}),
+        ...(aggregatedGenerateSpecifics.length > 0 ? { generate_custom_specifics: aggregatedGenerateSpecifics } : {}),
+        ...(aggregatedPassiveSpecifics.length > 0 ? { passive_custom_specifics: aggregatedPassiveSpecifics } : {}),
+        ...(data.immunityEnabled ? { immunity_total: immunityTotal, immunity_anomalies: immunityAnomalies, immunity_damage_effects: immunityDamageEffects } : {}),
       };
 
       if (mode === 'edit' && editSpell) {
@@ -3552,6 +4111,155 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
                       />
                     </div>
                   ) : null}
+                  <div className="mt-4">
+                    <Label>Effetto se condizione?</Label>
+                    <Controller
+                      name="passiveConditionEnabled"
+                      control={control}
+                      render={({ field }) => (
+                        <Select
+                          onValueChange={(v) => field.onChange(v === 'yes')}
+                          value={field.value ? 'yes' : 'no'}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Effetto se condizione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="no">No</SelectItem>
+                            <SelectItem value="yes">Sì</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
+                  {watchedPassiveConditionEnabled ? (
+                    <div className="space-y-3 mt-3">
+                      <div className="space-y-2">
+                        <Label>Seleziona condizione</Label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {PASSIVE_CONDITION_TYPES.map((opt) => {
+                            const selected = Array.isArray(watchedPassiveConditionTypes) ? watchedPassiveConditionTypes : [];
+                            const checked = selected.includes(opt.id);
+                            return (
+                              <div key={opt.id} className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(checkedVal) => {
+                                    const curr = Array.isArray(watchedPassiveConditionTypes) ? watchedPassiveConditionTypes : [];
+                                    const next = checkedVal
+                                      ? Array.from(new Set([...curr, opt.id]))
+                                      : curr.filter((t) => t !== opt.id);
+                                    setValue('passiveConditionTypes', next, { shouldDirty: true });
+                                  }}
+                                />
+                                <span className="text-sm">{opt.label}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Selezione specifica — multiple</Label>
+                        <div className="space-y-2">
+                          {passiveConditionSpecificFields.map((sf, idx) => (
+                            <div key={sf.id} className="flex items-center gap-2">
+                              <Controller
+                                name={`passiveConditionSpecifics.${idx}.id`}
+                                control={control}
+                                render={({ field }) => {
+                                  const classicOptions = PASSIVE_CLASSIC_SPECIFICS.map((opt) => ({
+                                    value: opt.id,
+                                    label: opt.name,
+                                    kind: opt.kind,
+                                    key: opt.key,
+                                    name: opt.name,
+                                  }));
+                                  const customOptions = (specificCatalog || []).map((opt) => ({
+                                    value: opt.id,
+                                    label: opt.name,
+                                    kind: 'custom' as const,
+                                    key: opt.id,
+                                    name: opt.name,
+                                  }));
+                                  const allOptions = [...classicOptions, ...customOptions];
+                                  return (
+                                    <Select
+                                      onValueChange={(v) => {
+                                        const found = allOptions.find((o) => o.value === v);
+                                        field.onChange(v);
+                                        setValue(`passiveConditionSpecifics.${idx}.name`, found?.name ?? '', { shouldDirty: true });
+                                        setValue(`passiveConditionSpecifics.${idx}.kind`, found?.kind ?? 'custom', { shouldDirty: true });
+                                        setValue(`passiveConditionSpecifics.${idx}.key`, found?.key ?? '', { shouldDirty: true });
+                                      }}
+                                      value={field.value || ''}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder={(specificCatalog || []).length === 0 ? 'Seleziona specifica' : 'Seleziona specifica'} />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {allOptions.map((opt) => (
+                                          <SelectItem key={`pcs:${opt.value}`} value={opt.value}>{opt.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  );
+                                }}
+                              />
+                              <Button type="button" variant="destructive" onClick={() => removePassiveConditionSpecific(idx)}>
+                                Rimuovi
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                        <Button type="button" onClick={() => appendPassiveConditionSpecific({ id: '', name: '', kind: 'custom', key: '' })}>
+                          Aggiungi specifica
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="mt-4 space-y-2">
+                    <Label>Sblocca specifiche custom</Label>
+                    <div className="space-y-3">
+                      {passiveCustomSpecificFields.length === 0 ? (
+                        <div className="text-xs text-muted-foreground">Nessuna specifica selezionata.</div>
+                      ) : null}
+                      {passiveCustomSpecificFields.map((field, idx) => (
+                        <div key={field.id} className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-center">
+                          <Controller
+                            name={`passiveCustomSpecifics.${idx}.id`}
+                            control={control}
+                            render={({ field: selectField }) => (
+                              <Select
+                                onValueChange={(val) => {
+                                  const found = specificCatalog.find((s) => String(s.id) === String(val));
+                                  selectField.onChange(val);
+                                  setValue(`passiveCustomSpecifics.${idx}.name`, found?.name ?? '', { shouldDirty: true });
+                                }}
+                                value={selectField.value || ''}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder={(specificCatalog || []).length === 0 ? 'Seleziona specifica' : 'Seleziona specifica'} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {specificCatalog.map((spec) => (
+                                    <SelectItem key={`pcs-unlock:${spec.id}`} value={spec.id}>
+                                      {spec.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          />
+                          <Button type="button" variant="destructive" onClick={() => removePassiveCustomSpecific(idx)}>
+                            Rimuovi
+                          </Button>
+                        </div>
+                      ))}
+                      <Button type="button" variant="outline" onClick={() => appendPassiveCustomSpecific({ id: '', name: '' })}>
+                        Aggiungi specifica
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
@@ -3778,6 +4486,127 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
                 <p className="text-xs text-muted-foreground">
                   I tipi di danno si applicano a tutti i livelli. Per ogni tipo, inserirai i valori al livello corrispondente.
                 </p>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Immunità?</Label>
+                <Controller
+                  name="immunityEnabled"
+                  control={control}
+                  render={({ field }) => (
+                    <Select onValueChange={(v) => field.onChange(v === 'yes')} value={field.value ? 'yes' : 'no'}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Abilita immunità" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="no">No</SelectItem>
+                        <SelectItem value="yes">Sì</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {watchedImmunityEnabled ? (
+                  <div className="space-y-3">
+                    <div>
+                      <Label>Immunità totale?</Label>
+                      <Controller
+                        name="immunityTotal"
+                        control={control}
+                        render={({ field }) => (
+                          <Select onValueChange={(v) => field.onChange(v === 'yes')} value={field.value ? 'yes' : 'no'}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Immunità totale" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="no">No</SelectItem>
+                              <SelectItem value="yes">Sì</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                    {!watchedImmunityTotal ? (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label>Immunità anomalie</Label>
+                          {immunityAnomalyFields.map((ia, idx) => (
+                            <div key={ia.id} className="flex items-center gap-2">
+                              <Controller
+                                name={`immunityAnomalies.${idx}.id`}
+                                control={control}
+                                render={({ field }) => (
+                                  <Select
+                                    onValueChange={(v) => {
+                                      field.onChange(v);
+                                      const found = anomalyOptionsWithId.find((o) => String(o.id) === String(v));
+                                      setValue(`immunityAnomalies.${idx}.name`, found?.name || '', { shouldDirty: true });
+                                    }}
+                                    value={field.value}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder={anomalyLoading ? "Caricamento..." : "Seleziona anomalia"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {anomalyOptionsWithId.map((opt) => (
+                                        <SelectItem key={opt.id} value={opt.id}>
+                                          {opt.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                              />
+                              <Button type="button" variant="destructive" onClick={() => removeImmunityAnomaly(idx)}>
+                                Rimuovi
+                              </Button>
+                            </div>
+                          ))}
+                          <Button type="button" onClick={() => appendImmunityAnomaly({ id: '', name: '' })}>
+                            Aggiungi anomalia
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Immunità effetti danno</Label>
+                          {immunityDamageEffectFields.map((ie, idx) => (
+                            <div key={ie.id} className="flex items-center gap-2">
+                              <Controller
+                                name={`immunityDamageEffects.${idx}.id`}
+                                control={control}
+                                render={({ field }) => (
+                                  <Select
+                                    onValueChange={(v) => {
+                                      field.onChange(v);
+                                      const found = damageEffectOptions.find((o) => String(o.id) === String(v));
+                                      setValue(`immunityDamageEffects.${idx}.name`, found?.name || '', { shouldDirty: true });
+                                    }}
+                                    value={field.value}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder={damageEffectLoading ? "Caricamento..." : "Seleziona effetto"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {damageEffectOptions.map((opt) => (
+                                        <SelectItem key={opt.id} value={opt.id}>
+                                          {opt.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                              />
+                              <Button type="button" variant="destructive" onClick={() => removeImmunityDamageEffect(idx)}>
+                                Rimuovi
+                              </Button>
+                            </div>
+                          ))}
+                          <Button type="button" onClick={() => appendImmunityDamageEffect({ id: '', name: '' })}>
+                            Aggiungi effetto
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-3">
@@ -4458,6 +5287,134 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
               ) : null}
 
               <div className="mt-4">
+                <Label>Consumo specifica personalizzata?</Label>
+                <Controller
+                  name="consumeCustomSpecificsEnabled"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      onValueChange={(v) => field.onChange(v === 'yes')}
+                      value={field.value ? 'yes' : 'no'}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Abilita consumo specifica personalizzata" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="no">No</SelectItem>
+                        <SelectItem value="yes">Sì</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+
+              {watchedConsumeCustomSpecificsEnabled ? (
+                <div className="space-y-3 mt-3">
+                  <Label>Specifiche da consumare — multiple</Label>
+                  <div className="space-y-2">
+                    {consumeSpecificFields.map((sf, idx) => (
+                      <div key={sf.id} className="flex items-center gap-2">
+                        <Controller
+                          name={`consumeCustomSpecifics.${idx}.id`}
+                          control={control}
+                          rules={{ required: 'La specifica è obbligatoria' }}
+                          render={({ field }) => (
+                            <Select
+                              onValueChange={(v) => {
+                                const found = (specificCatalog || []).find((s) => s.id === v);
+                                field.onChange(v);
+                                setValue(`consumeCustomSpecifics.${idx}.name`, found?.name ?? '', { shouldDirty: true });
+                              }}
+                              value={field.value}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={specificCatalog.length === 0 ? 'Nessuna specifica' : 'Seleziona specifica'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(specificCatalog || []).map((opt) => (
+                                  <SelectItem key={`cs:${opt.id}`} value={opt.id}>{opt.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                        <Button type="button" variant="destructive" onClick={() => removeConsumeSpecific(idx)}>
+                          Rimuovi
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button type="button" onClick={() => appendConsumeSpecific({ id: '', name: '' })}>
+                    Aggiungi specifica da consumare
+                  </Button>
+                </div>
+              ) : null}
+
+              <div className="mt-4">
+                <Label>Utilizzo genera specifica personalizzata?</Label>
+                <Controller
+                  name="generateCustomSpecificsEnabled"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      onValueChange={(v) => field.onChange(v === 'yes')}
+                      value={field.value ? 'yes' : 'no'}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Abilita generazione specifica personalizzata" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="no">No</SelectItem>
+                        <SelectItem value="yes">Sì</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+
+              {watchedGenerateCustomSpecificsEnabled ? (
+                <div className="space-y-3 mt-3">
+                  <Label>Specifiche generate — multiple</Label>
+                  <div className="space-y-2">
+                    {generateSpecificFields.map((sf, idx) => (
+                      <div key={sf.id} className="flex items-center gap-2">
+                        <Controller
+                          name={`generateCustomSpecifics.${idx}.id`}
+                          control={control}
+                          rules={{ required: 'La specifica è obbligatoria' }}
+                          render={({ field }) => (
+                            <Select
+                              onValueChange={(v) => {
+                                const found = (specificCatalog || []).find((s) => s.id === v);
+                                field.onChange(v);
+                                setValue(`generateCustomSpecifics.${idx}.name`, found?.name ?? '', { shouldDirty: true });
+                              }}
+                              value={field.value}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={specificCatalog.length === 0 ? 'Nessuna specifica' : 'Seleziona specifica'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(specificCatalog || []).map((opt) => (
+                                  <SelectItem key={`gs:${opt.id}`} value={opt.id}>{opt.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                        <Button type="button" variant="destructive" onClick={() => removeGenerateSpecific(idx)}>
+                          Rimuovi
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button type="button" onClick={() => appendGenerateSpecific({ id: '', name: '' })}>
+                    Aggiungi specifica generata
+                  </Button>
+                </div>
+              ) : null}
+
+              <div className="mt-4">
                 <Label>Rimuovi anomalia?</Label>
                 <Controller
                   name="removeAnomalyEnabled"
@@ -4701,6 +5658,82 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
                               />
                             )}
                           />
+                        </div>
+                      ) : null}
+
+                      {watchedConsumeCustomSpecificsEnabled && Array.isArray(watchedConsumeCustomSpecifics) && watchedConsumeCustomSpecifics.length > 0 ? (
+                        <div className="space-y-2">
+                          <Label>Consumo specifica personalizzata</Label>
+                          {watchedConsumeCustomSpecifics.map((spec: any, specIdx: number) => {
+                            const current = Array.isArray((watchedLevels?.[index] as any)?.consume_custom_specifics)
+                              ? (((watchedLevels?.[index] as any).consume_custom_specifics) as any[])
+                              : [];
+                            const found = current.find((s: any) => (s?.id === spec?.id) || ((s?.name ?? '') === spec?.name)) || {};
+                            const value = typeof found?.value === 'number' ? found.value : Number(found?.value) || 0;
+                            return (
+                              <div key={`ccs:${spec?.id || specIdx}`} className="grid grid-cols-2 gap-2 items-center">
+                                <div className="text-sm">{spec?.name || 'Specifica'}</div>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  placeholder="0.0"
+                                  value={value}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    const next = (Array.isArray(watchedConsumeCustomSpecifics) ? watchedConsumeCustomSpecifics : []).map((s: any) => {
+                                      const existing = current.find((c: any) => (c?.id === s?.id) || ((c?.name ?? '') === s?.name)) || {};
+                                      return {
+                                        id: (s?.id ?? '').toString(),
+                                        name: (s?.name ?? '').toString(),
+                                        value: typeof existing?.value === 'number' ? existing.value : Number(existing?.value) || 0,
+                                      };
+                                    });
+                                    if (next[specIdx]) next[specIdx].value = val;
+                                    setValue(`levels.${index}.consume_custom_specifics`, next, { shouldDirty: true });
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+
+                      {watchedGenerateCustomSpecificsEnabled && Array.isArray(watchedGenerateCustomSpecifics) && watchedGenerateCustomSpecifics.length > 0 ? (
+                        <div className="space-y-2">
+                          <Label>Utilizzo genera specifica personalizzata</Label>
+                          {watchedGenerateCustomSpecifics.map((spec: any, specIdx: number) => {
+                            const current = Array.isArray((watchedLevels?.[index] as any)?.generate_custom_specifics)
+                              ? (((watchedLevels?.[index] as any).generate_custom_specifics) as any[])
+                              : [];
+                            const found = current.find((s: any) => (s?.id === spec?.id) || ((s?.name ?? '') === spec?.name)) || {};
+                            const value = typeof found?.value === 'number' ? found.value : Number(found?.value) || 0;
+                            return (
+                              <div key={`gcs:${spec?.id || specIdx}`} className="grid grid-cols-2 gap-2 items-center">
+                                <div className="text-sm">{spec?.name || 'Specifica'}</div>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  placeholder="0.0"
+                                  value={value}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    const next = (Array.isArray(watchedGenerateCustomSpecifics) ? watchedGenerateCustomSpecifics : []).map((s: any) => {
+                                      const existing = current.find((c: any) => (c?.id === s?.id) || ((c?.name ?? '') === s?.name)) || {};
+                                      return {
+                                        id: (s?.id ?? '').toString(),
+                                        name: (s?.name ?? '').toString(),
+                                        value: typeof existing?.value === 'number' ? existing.value : Number(existing?.value) || 0,
+                                      };
+                                    });
+                                    if (next[specIdx]) next[specIdx].value = val;
+                                    setValue(`levels.${index}.generate_custom_specifics`, next, { shouldDirty: true });
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : null}
 
@@ -7649,6 +8682,125 @@ export const AddSpellModal = ({ isOpen, onClose, editSpell = null, mode = 'add' 
                                 );
                               })}
                             </div>
+                          )}
+                        </div>
+                      ) : null}
+
+                      {watchedType === 'Passiva' && watchedPassiveConditionEnabled ? (
+                        <div className="space-y-2 mt-2">
+                          <Label>Condizioni passive</Label>
+                          {(() => {
+                            const list: any[] = Array.isArray((watchedLevels?.[index] as any)?.passive_specific_conditions)
+                              ? (((watchedLevels?.[index] as any)?.passive_specific_conditions) as any[])
+                              : [];
+                            const types = Array.isArray(watchedPassiveConditionTypes) ? watchedPassiveConditionTypes : [];
+                            const hasPercent = types.some((t) => t.includes('percent'));
+                            const hasValue = types.some((t) => t.includes('value'));
+                            if (list.length === 0) {
+                              return <p className="text-sm text-muted-foreground">Nessuna specifica selezionata.</p>;
+                            }
+                            return (
+                              <div className="space-y-3">
+                                {list.map((s: any, si: number) => (
+                                  <div key={`pcond-${index}-${s?.id || s?.key || si}`} className="space-y-2">
+                                    <p className="text-sm font-medium">{(s?.name || 'Specifica').toString()}</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                      {hasPercent ? (
+                                        <>
+                                          <div>
+                                            <Label className="text-xs">Tetto minimo %</Label>
+                                            <Controller
+                                              name={`levels.${index}.passive_specific_conditions.${si}.min_percent`}
+                                              control={control}
+                                              render={({ field }) => (
+                                                <Input
+                                                  type="number"
+                                                  {...field}
+                                                  onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                                                />
+                                              )}
+                                            />
+                                          </div>
+                                          <div>
+                                            <Label className="text-xs">Tetto massimo %</Label>
+                                            <Controller
+                                              name={`levels.${index}.passive_specific_conditions.${si}.max_percent`}
+                                              control={control}
+                                              render={({ field }) => (
+                                                <Input
+                                                  type="number"
+                                                  {...field}
+                                                  onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                                                />
+                                              )}
+                                            />
+                                          </div>
+                                        </>
+                                      ) : null}
+                                      {hasValue ? (
+                                        <>
+                                          <div>
+                                            <Label className="text-xs">Tetto minimo numerico</Label>
+                                            <Controller
+                                              name={`levels.${index}.passive_specific_conditions.${si}.min_value`}
+                                              control={control}
+                                              render={({ field }) => (
+                                                <Input
+                                                  type="number"
+                                                  {...field}
+                                                  onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                                                />
+                                              )}
+                                            />
+                                          </div>
+                                          <div>
+                                            <Label className="text-xs">Tetto massimo numerico</Label>
+                                            <Controller
+                                              name={`levels.${index}.passive_specific_conditions.${si}.max_value`}
+                                              control={control}
+                                              render={({ field }) => (
+                                                <Input
+                                                  type="number"
+                                                  {...field}
+                                                  onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                                                />
+                                              )}
+                                            />
+                                          </div>
+                                        </>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      ) : null}
+
+                      {watchedType === 'Passiva' ? (
+                        <div className="space-y-2 mt-2">
+                          <Label>Limite massimo specifiche (passiva)</Label>
+                          {Array.isArray(watchedPassiveCustomSpecifics) && watchedPassiveCustomSpecifics.length > 0 ? (
+                            <div className="space-y-2">
+                              {(watch(`levels.${index}.passive_custom_specifics`) || []).map((spec: any, sIdx: number) => (
+                                <div key={`pcmax-${index}-${sIdx}`} className="flex items-center gap-2">
+                                  <Badge variant="outline">{spec?.name || 'Specifica'}</Badge>
+                                  <Input
+                                    type="number"
+                                    value={spec?.max ?? 0}
+                                    onChange={(e) => {
+                                      const v = Number(e.target.value) || 0;
+                                      const path = `levels.${index}.passive_custom_specifics.${sIdx}.max` as const;
+                                      setValue(path, v, { shouldDirty: true });
+                                    }}
+                                    className="w-28"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">Seleziona specifiche nella sezione passiva.</p>
                           )}
                         </div>
                       ) : null}

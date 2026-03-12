@@ -98,6 +98,62 @@ export function AbilityItem({
       default: return 'bg-gray-100 text-gray-800 border-gray-200'
     }
   }
+  const n = (v: unknown): number => {
+    if (typeof v === 'number') return v
+    const s = String(v ?? '').trim().replace(',', '.')
+    const m = s.match(/-?\d+(?:\.\d+)?/)
+    return m ? parseFloat(m[0]) : 0
+  }
+  const specLabel = (r: any): string => {
+    const name = String(r?.name ?? '').trim()
+    if (name) return name
+    const id = String(r?.id ?? r?.key ?? '').trim()
+    return id || 'Specifica'
+  }
+  const getConsumeSpecifics = (item: any, levelData: any) => {
+    const fromLevel = Array.isArray(levelData?.consume_custom_specifics) ? levelData.consume_custom_specifics : []
+    const fromItem = Array.isArray(item?.consume_custom_specifics) ? item.consume_custom_specifics : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromItem
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      value: n(r?.value ?? r?.amount ?? 0)
+    })).filter((r: any) => r.value > 0 && (r.id || r.name))
+  }
+  const getGenerateSpecifics = (item: any, levelData: any) => {
+    const fromLevel = Array.isArray(levelData?.generate_custom_specifics) ? levelData.generate_custom_specifics : []
+    const fromItem = Array.isArray(item?.generate_custom_specifics) ? item.generate_custom_specifics : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromItem
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      value: n(r?.value ?? r?.amount ?? 0)
+    })).filter((r: any) => r.value > 0 && (r.id || r.name))
+  }
+  const getPassiveCustomSpecifics = (item: any, levelData: any) => {
+    const fromLevel = Array.isArray(levelData?.passive_custom_specifics) ? levelData.passive_custom_specifics : []
+    const fromItem = Array.isArray(item?.passive_custom_specifics) ? item.passive_custom_specifics : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromItem
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      max: n(r?.max ?? r?.value ?? 0)
+    })).filter((r: any) => r.max > 0 && (r.id || r.name))
+  }
+  const getRequiredSpecifics = (item: any, levelData: any) => {
+    const fromLevel = Array.isArray(levelData?.passive_specific_conditions) ? levelData.passive_specific_conditions : []
+    const fromItem = Array.isArray(item?.passive_specific_conditions) ? item.passive_specific_conditions : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromItem
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      key: String(r?.key ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      minPercent: n(r?.min_percent ?? r?.minPercent ?? 0),
+      maxPercent: n(r?.max_percent ?? r?.maxPercent ?? 0),
+      minValue: n(r?.min_value ?? r?.minValue ?? 0),
+      maxValue: n(r?.max_value ?? r?.maxValue ?? 0),
+    })).filter((r: any) => (r.id || r.key || r.name) && (r.minPercent > 0 || r.maxPercent > 0 || r.minValue > 0 || r.maxValue > 0))
+  }
   
   const handleItemClick = () => {
     if (onSelect) {
@@ -110,30 +166,32 @@ export function AbilityItem({
   
   return (
     <div 
-      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+      className={`flex flex-col gap-2 md:flex-row md:items-start md:justify-between p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
         isSelected 
           ? 'bg-accent/15 border-primary/60 shadow-lg shadow-primary/15 ring-2 ring-primary/30'
           : 'bg-muted/30 border-border hover:bg-muted/50'
       }`}
       onClick={handleItemClick}
     >
-      <div className="flex items-center gap-3 flex-1">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-3 flex-1">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="space-y-1 mb-1">
             <h4 className="font-medium text-sm">{ability.name}</h4>
-            <Badge className={getTypeColor(ability.type)}>
-              {ability.type}
-            </Badge>
-            {ability.current_level && (
-              <Badge variant="outline" className="text-xs">
-                Livello {ability.current_level}
+            <div className="flex flex-wrap gap-1">
+              <Badge className={getTypeColor(ability.type)}>
+                {ability.type}
               </Badge>
-            )}
-            {isFromEquipment && equipmentSourceName && (
-              <Badge variant="secondary" className="text-xs">
-                {equipmentSourceName}
-              </Badge>
-            )}
+              {ability.current_level && (
+                <Badge variant="outline" className="text-xs">
+                  Livello {ability.current_level}
+                </Badge>
+              )}
+              {isFromEquipment && equipmentSourceName && (
+                <Badge variant="secondary" className="text-xs">
+                  {equipmentSourceName}
+                </Badge>
+              )}
+            </div>
           </div>
           <p className="text-xs text-muted-foreground mb-1">
             {ability.description}
@@ -165,6 +223,23 @@ export function AbilityItem({
           </div>
 
           {(() => {
+            const lvl: any = currentLevel || {}
+            const everyHp = Number(lvl?.less_health_more_damage_every_hp ?? lvl?.lessHealthMoreDamageEveryHp ?? 0) || 0
+            const vals = Array.isArray(lvl?.damage_values) ? lvl.damage_values : []
+            const inc = vals.filter((v: any) => gt0(v?.less_health_more_damage_guaranteed_increment) || gt0(v?.less_health_more_damage_additional_increment))
+            if (!(everyHp > 0 && inc.length > 0)) return null
+            return (
+              <div className="text-xs text-muted-foreground mb-1">
+                {inc.map((v: any, i: number) => (
+                  <div key={`mh-${i}`}>
+                    Salute mancante: {String(v?.typeName || v?.name || 'Tipo')} ogni {everyHp} HP{gt0(v?.less_health_more_damage_guaranteed_increment) ? ` +${v.less_health_more_damage_guaranteed_increment} garantiti` : ''}{gt0(v?.less_health_more_damage_additional_increment) ? `${gt0(v?.less_health_more_damage_guaranteed_increment) ? ',' : ''} +${v.less_health_more_damage_additional_increment} addizionali` : ''}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
+          {(() => {
             const parts: string[] = []
             const lvl: any = currentLevel || {}
             if (Number(lvl.usage_interval_turns || 0) > 0) parts.push(`Intervallo: ${Number(lvl.usage_interval_turns || 0)}t`)
@@ -178,6 +253,66 @@ export function AbilityItem({
             return parts.length > 0 ? (
               <div className="text-xs text-muted-foreground mb-1">{parts.join(' • ')}</div>
             ) : null
+          })()}
+
+          {(() => {
+            const lvl: any = currentLevel || {}
+            const consume = getConsumeSpecifics(ability, lvl)
+            const generate = getGenerateSpecifics(ability, lvl)
+            const passiveCustom = getPassiveCustomSpecifics(ability, lvl)
+            const required = getRequiredSpecifics(ability, lvl)
+            if (consume.length === 0 && generate.length === 0 && passiveCustom.length === 0 && required.length === 0) return null
+            return (
+              <div className="text-xs text-muted-foreground mb-1 space-y-1">
+                {consume.length > 0 && (
+                  <div>
+                    <span className="font-medium">Specifiche consumate:</span>
+                    <div className="ml-2">
+                      {consume.map((r: any, i: number) => (
+                        <div key={`${r.id || r.name || i}`}>• {specLabel(r)}: {n(r.value)}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {generate.length > 0 && (
+                  <div>
+                    <span className="font-medium">Specifiche generate:</span>
+                    <div className="ml-2">
+                      {generate.map((r: any, i: number) => (
+                        <div key={`${r.id || r.name || i}`}>• {specLabel(r)}: {n(r.value)}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {passiveCustom.length > 0 && (
+                  <div>
+                    <span className="font-medium">Specifiche sbloccate:</span>
+                    <div className="ml-2">
+                      {passiveCustom.map((r: any, i: number) => (
+                        <div key={`${r.id || r.name || i}`}>• {specLabel(r)}: {n(r.max)}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {required.length > 0 && (
+                  <div>
+                    <span className="font-medium">Specifiche richieste:</span>
+                    <div className="ml-2">
+                      {required.map((r: any, i: number) => {
+                        const parts: string[] = []
+                        if (r.minPercent > 0) parts.push(`min % ${n(r.minPercent)}`)
+                        if (r.maxPercent > 0) parts.push(`max % ${n(r.maxPercent)}`)
+                        if (r.minValue > 0) parts.push(`min ${n(r.minValue)}`)
+                        if (r.maxValue > 0) parts.push(`max ${n(r.maxValue)}`)
+                        return (
+                          <div key={`${r.id || r.key || r.name || i}`}>• {specLabel(r)}{parts.length > 0 ? `: ${parts.join(', ')}` : ''}</div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
           })()}
           
           {/* Effetti speciali se presenti */}
@@ -195,7 +330,7 @@ export function AbilityItem({
         </div>
       </div>
       
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap gap-2 md:ml-4 md:self-center">
         <Button
           variant="outline"
           size="sm"

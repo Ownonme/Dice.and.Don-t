@@ -631,6 +631,18 @@ export function useNewRollHistory() {
         }
       } catch {}
 
+      const eqExtraDetails: any[] = Array.isArray((eq as any)?.extraDamageDetails) ? (eq as any).extraDamageDetails : [];
+      const eqExtraTotal = Number((eq as any)?.extraDamageTotal || 0) || 0;
+      if (eqExtraDetails.length > 0) {
+        eqExtraDetails.forEach((row: any) => {
+          const name = String(row?.typeName || 'Danno extra');
+          const val = Number(row?.total || 0) || 0;
+          if (!val) return;
+          const detail = Array.isArray(row?.details) && row.details.length ? row.details.join(', ') : undefined;
+          damageSources.push({ label: `Danno extra • ${name}`, value: val, pure: isCritical, detail });
+        });
+      }
+
       // Competenze lato danno...
       const compIds = Array.isArray((damage as any).competences) ? (damage as any).competences : [];
       let compTotal = 0;
@@ -764,7 +776,7 @@ export function useNewRollHistory() {
       const eqTotal = isCritical
         ? (Number(eq.totalPureDamage || 0) + Number(eq.calculatedDamage || 0))
         : Number(eq.totalPureDamage ?? (eq.guaranteedDamage || 0));
-      const totalBase = eqTotal + animaBonus + compTotal + bonusRollValue + arrowAdditionalValue;
+      const totalBase = eqTotal + animaBonus + compTotal + bonusRollValue + arrowAdditionalValue + eqExtraTotal;
       totalDamage = multiplier !== 1 ? Math.round(totalBase * multiplier) : totalBase;
 
       const weaponName = weapon?.name || 'Arma';
@@ -1118,6 +1130,18 @@ export function useNewRollHistory() {
         }
       }
 
+      const extraDamageDetails: any[] = Array.isArray((calc as any)?.extraDamageDetails) ? (calc as any).extraDamageDetails : [];
+      const extraDamageTotal = Number((calc as any)?.extraDamageTotal || 0) || 0;
+      if (extraDamageDetails.length > 0) {
+        extraDamageDetails.forEach((row: any) => {
+          const name = String(row?.typeName || 'Danno extra');
+          const val = Number(row?.total || 0) || 0;
+          if (!val) return;
+          const detail = Array.isArray(row?.details) && row.details.length ? row.details.join(', ') : undefined;
+          damageSources.push({ label: `Danno extra • ${name}`, value: val, pure: isCritical, detail });
+        });
+      }
+
       const incPure = Number((calc as any)?.increasingPureTotal ?? ((calc as any)?.increasingPerSecondPure ?? 0));
       if (incPure > 0) {
         const levelData = (item as any)?.levels?.find((l: any) => l.level === (item as any)?.current_level) || (item as any);
@@ -1348,9 +1372,22 @@ export function useNewRollHistory() {
             }
           } catch {}
 
+          const eqExtraDetails: any[] = Array.isArray((eq as any)?.extraDamageDetails) ? (eq as any).extraDamageDetails : [];
+          const eqExtraTotal = Number((eq as any)?.extraDamageTotal || 0) || 0;
+          if (eqExtraDetails.length > 0) {
+            eqExtraDetails.forEach((row: any) => {
+              const name = String(row?.typeName || 'Danno extra');
+              const val = Number(row?.total || 0) || 0;
+              if (!val) return;
+              const detail = Array.isArray(row?.details) && row.details.length ? row.details.join(', ') : undefined;
+              damageSources.push({ label: `Danno extra • ${name}`, value: val, pure: isCritical, detail });
+            });
+          }
+
           weaponExtraTotal += isCritical
             ? (Number(eq.totalPureDamage || 0) + Number(eq.calculatedDamage || 0))
             : Number(eq.totalPureDamage ?? (eq.guaranteedDamage || 0));
+          weaponExtraTotal += eqExtraTotal;
 
           // Competenze arma separate
           const compIds2 = Array.isArray((damage as any)?.weaponCompetences) ? (damage as any).weaponCompetences : [];
@@ -1379,7 +1416,7 @@ export function useNewRollHistory() {
       }
 
       // Base di calcolo separata: il Moltiplicatore PA si applica SOLO ai danni della magia
-      const baseMagicDamage = (calc.guaranteedDamage || 0) + (calc.additionalDamage || 0) + Number((calc as any)?.increasingPureTotal ?? (calc as any)?.increasingPerSecondPure ?? 0) + lotteryMagicAddition + scaledMovePureTotal;
+      const baseMagicDamage = (calc.guaranteedDamage || 0) + (calc.additionalDamage || 0) + Number((calc as any)?.increasingPureTotal ?? (calc as any)?.increasingPerSecondPure ?? 0) + lotteryMagicAddition + scaledMovePureTotal + extraDamageTotal;
       const nonMagicDamage = (calc.competenceTotal || 0) + animaBonus + bonusRollValue2 + weaponExtraTotal;
 
       // Incremento danno per PA: applica se esiste un rate > 0 e PA selezionati

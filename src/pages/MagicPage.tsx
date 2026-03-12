@@ -90,7 +90,7 @@ export default function MagicPage({ character, updateCharacter }: MagicPageProps
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-2">
               <CardTitle>Magie del Personaggio</CardTitle>
               {isSaving && (
@@ -100,13 +100,13 @@ export default function MagicPage({ character, updateCharacter }: MagicPageProps
                 </div>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center">
               {isAdmin && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setIsImportModalOpen(true)}
-                  className="bg-purple-500 text-white hover:bg-purple-600"
+                  className="w-full md:w-auto bg-purple-500 text-white hover:bg-purple-600"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Importa Magia

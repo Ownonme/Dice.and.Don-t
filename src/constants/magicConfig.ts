@@ -93,6 +93,7 @@ export const MAGIC_SECTIONS = {
     name: 'Speciale',
     categories: {
       'Draconico': { name: 'Draconico', competence: 'draconico' },
+      'Infernale': { name: 'Infernale', competence: 'infernale' },
       'Critico': { name: 'Critico', competence: 'critico' },
       'Altro': { name: 'Altro', competence: 'altro' }
     }

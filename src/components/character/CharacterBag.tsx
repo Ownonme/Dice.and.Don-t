@@ -168,7 +168,7 @@ const CharacterBag = ({
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="currency" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 gap-2 h-auto p-1 mt-2 mb-4">
             <TabsTrigger value="currency">Denari</TabsTrigger>
             <TabsTrigger value="arrows">Proiettili</TabsTrigger>
             <TabsTrigger value="potions">Pozioni</TabsTrigger>
@@ -268,7 +268,7 @@ const CharacterBag = ({
 
           {/* Faretra */}
           <TabsContent value="arrows" className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <h3 className="text-lg font-semibold">Proiettili</h3>
               <Button 
                 onClick={() => {
@@ -276,6 +276,7 @@ const CharacterBag = ({
                   setArrowModalOpen(true);
                 }}
                 size="sm"
+                className="w-full md:w-auto"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Aggiungi Proiettile
@@ -284,18 +285,20 @@ const CharacterBag = ({
 
             <div className="space-y-2">
               {arrows.map((arrow) => (
-                <div key={arrow.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div key={arrow.id} className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between p-3 border rounded-lg">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="space-y-1">
                       <h5 className="font-semibold">{arrow.name || 'Freccia senza nome'}</h5>
-                      <Badge variant="secondary">Danno: {arrow.damage}</Badge>
-                      <Badge variant="outline">Qty: {arrow.quantity}</Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="secondary">Danno: {arrow.damage}</Badge>
+                        <Badge variant="outline">Qty: {arrow.quantity}</Badge>
+                      </div>
                     </div>
                     {arrow.description && (
                       <p className="text-sm text-muted-foreground mt-1">{arrow.description}</p>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 md:ml-4">
                     <Button 
                       variant="outline" 
                       size="sm" 
@@ -325,7 +328,7 @@ const CharacterBag = ({
 
           {/* Pozioni */}
           <TabsContent value="potions" className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <h3 className="text-lg font-semibold">Pozioni</h3>
               <Button 
                 onClick={() => {
@@ -333,6 +336,7 @@ const CharacterBag = ({
                   setPotionModalOpen(true);
                 }}
                 size="sm"
+                className="w-full md:w-auto"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Aggiungi Pozione
@@ -341,14 +345,16 @@ const CharacterBag = ({
 
             <div className="space-y-2">
               {potions.map((potion) => (
-                <div key={potion.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div key={potion.id} className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between p-3 border rounded-lg">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="space-y-1">
                       <h5 className="font-semibold">{potion.name || 'Pozione senza nome'}</h5>
-                      {potion.isRestore && (
-                        <Badge variant="outline" className="text-xs">Ripristina</Badge>
-                      )}
-                      <Badge variant="outline">Qty: {potion.quantity}</Badge>
+                      <div className="flex flex-wrap gap-1">
+                        {potion.isRestore && (
+                          <Badge variant="outline" className="text-xs">Ripristina</Badge>
+                        )}
+                        <Badge variant="outline">Qty: {potion.quantity}</Badge>
+                      </div>
                     </div>
                     {potion.description && (
                       <p className="text-sm text-muted-foreground mt-1">{potion.description}</p>
@@ -462,7 +468,7 @@ const CharacterBag = ({
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 md:ml-4">
                     <Button 
                       variant="outline" 
                       size="sm" 
@@ -492,12 +498,12 @@ const CharacterBag = ({
 
           {/* Faretra Magica */}
           <TabsContent value="magic-quiver" className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <h3 className="text-lg font-semibold">Faretra Magica</h3>
               <Button 
                 onClick={() => setMagicQuiverModalOpen(true)}
                 size="sm"
-                className="bg-purple-500 text-white hover:bg-purple-600"
+                className="w-full md:w-auto bg-purple-500 text-white hover:bg-purple-600"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Importa Frecce Magiche
@@ -506,16 +512,18 @@ const CharacterBag = ({
 
             <div className="space-y-2">
               {magicQuivers.map((mq) => (
-                <div key={mq.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div key={mq.id} className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between p-3 border rounded-lg">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="space-y-1">
                       <h5 className="font-semibold">{mq.name}</h5>
-                      {mq.action_points_cost !== null && mq.action_points_cost !== undefined && (
-                        <Badge variant="secondary">PA: {Number(mq.action_points_cost || 0)}</Badge>
-                      )}
-                      {mq.indicative_action_points_cost !== null && mq.indicative_action_points_cost !== undefined && (
-                        <Badge variant="outline">PA Max: {Number(mq.indicative_action_points_cost || 0)}</Badge>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {mq.action_points_cost !== null && mq.action_points_cost !== undefined && (
+                          <Badge variant="secondary">PA: {Number(mq.action_points_cost || 0)}</Badge>
+                        )}
+                        {mq.indicative_action_points_cost !== null && mq.indicative_action_points_cost !== undefined && (
+                          <Badge variant="outline">PA Max: {Number(mq.indicative_action_points_cost || 0)}</Badge>
+                        )}
+                      </div>
                     </div>
                     {mq.description && (
                       <p className="text-sm text-muted-foreground mt-1">{mq.description}</p>
@@ -555,7 +563,7 @@ const CharacterBag = ({
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 md:ml-4">
                     {onRemoveMagicQuiver && (
                       <Button 
                         variant="destructive" 

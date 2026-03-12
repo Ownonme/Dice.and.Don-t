@@ -45,11 +45,11 @@ export function MagicCategory({
   return (
     <Card className="border border-gray-200">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-1">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <Button
             variant="ghost"
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-1 p-0 h-auto flex-1 min-w-0 justify-start"
+            className="flex items-center gap-1 p-0 h-auto min-w-0 justify-start"
           >
             <CardTitle className="text-base font-semibold truncate">
               {categoryConfig.name}

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Save, Edit3 } from 'lucide-react';
 import { Character } from '@/types/character';
+import { useAuth } from '@/hooks/useAuth';
 
 interface CharacterStatsDisplayProps {
   character: Character | null;
@@ -30,6 +31,7 @@ const CharacterStatsDisplay: React.FC<CharacterStatsDisplayProps> = ({
   onSaveStats,
   onOpenModificationModal // Aggiungi questa prop
 }) => {
+  const { isAdmin } = useAuth();
   if (!character || !calculations) {
     return (
       <Card className="h-full">
@@ -64,7 +66,7 @@ const CharacterStatsDisplay: React.FC<CharacterStatsDisplayProps> = ({
         <CardTitle className="flex items-center justify-between">
           <span>Specifiche Personaggio</span>
           <div className="flex items-center gap-2">
-            {onOpenModificationModal && (
+            {isAdmin && onOpenModificationModal && (
               <Button 
                 size="sm" 
                 variant="outline"
@@ -75,7 +77,7 @@ const CharacterStatsDisplay: React.FC<CharacterStatsDisplayProps> = ({
                 Modifica
               </Button>
             )}
-            {onSaveStats && (
+            {isAdmin && onSaveStats && (
               <Button size="sm" onClick={onSaveStats} className="h-8 px-2">
                 <Save className="h-3 w-3 mr-1" />
                 Salva
@@ -95,6 +97,7 @@ const CharacterStatsDisplay: React.FC<CharacterStatsDisplayProps> = ({
                 type="number"
                 value={currentHealth}
                 onChange={(e) => onHealthChange(e.target.value)}
+                disabled={!isAdmin}
                 className="w-16 text-center"
                 min={0}
                 max={calculations.maxHealth}
@@ -116,6 +119,7 @@ const CharacterStatsDisplay: React.FC<CharacterStatsDisplayProps> = ({
                 type="number"
                 value={currentActionPoints}
                 onChange={(e) => onActionPointsChange(e.target.value)}
+                disabled={!isAdmin}
                 className="w-16 text-center"
                 min={0}
                 max={calculations.maxActionPoints}
@@ -137,6 +141,7 @@ const CharacterStatsDisplay: React.FC<CharacterStatsDisplayProps> = ({
                 type="number"
                 value={currentArmor}
                 onChange={(e) => onArmorChange(e.target.value)}
+                disabled={!isAdmin}
                 className="w-16 text-center"
                 min={0}
                 max={calculations.totalArmor}

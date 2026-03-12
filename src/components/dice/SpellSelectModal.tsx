@@ -15,6 +15,7 @@ interface Props {
   character?: any
   spellCooldowns?: Record<string, number>
   perTurnUses?: Record<string, number>
+  initialSearchTerm?: string
   onConfirm?: (payload: { spell: any; level: number }) => void
 }
 
@@ -29,7 +30,7 @@ const hasText = (v: unknown): boolean => {
   return String(v ?? '').trim().length > 0
 }
 
-export function SpellSelectModal({ isOpen, onOpenChange, character, spellCooldowns, perTurnUses, onConfirm }: Props) {
+export function SpellSelectModal({ isOpen, onOpenChange, character, spellCooldowns, perTurnUses, initialSearchTerm, onConfirm }: Props) {
   const [searchTerm, setSearchTerm] = useState('')
   const [spells, setSpells] = useState<any[]>([])
   const [filteredSpells, setFilteredSpells] = useState<any[]>([])
@@ -41,10 +42,10 @@ export function SpellSelectModal({ isOpen, onOpenChange, character, spellCooldow
       const list = Array.isArray((character as any)?.custom_spells) ? (character as any).custom_spells : []
       setSpells(list)
       setSelectedSpell(null)
-      
-      setSearchTerm('')
+
+      setSearchTerm(String(initialSearchTerm ?? ''))
     }
-  }, [isOpen, character])
+  }, [isOpen, character, initialSearchTerm])
 
   useEffect(() => {
     let f = spells
@@ -63,6 +64,50 @@ export function SpellSelectModal({ isOpen, onOpenChange, character, spellCooldow
       : selectedSpell
     return levelObj || null
   }, [selectedSpell])
+
+  const getLevelData = (spell: any) => {
+    const levelNum = toNum((spell as any)?.current_level || (spell as any)?.levels?.[0]?.level || 1)
+    if (Array.isArray((spell as any)?.levels)) {
+      return (spell as any).levels.find((l: any) => toNum((l as any)?.level) === levelNum) || (spell as any).levels[0] || spell
+    }
+    return spell
+  }
+
+  const getConsumeSpecifics = (spell: any) => {
+    const lvl = getLevelData(spell)
+    const fromLevel = Array.isArray((lvl as any)?.consume_custom_specifics) ? (lvl as any).consume_custom_specifics : []
+    const fromSpell = Array.isArray((spell as any)?.consume_custom_specifics) ? (spell as any).consume_custom_specifics : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromSpell
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      value: toNum(r?.value ?? r?.amount ?? 0),
+    })).filter((r: any) => r.value > 0 && (r.id || r.name))
+  }
+  const getGenerateSpecifics = (spell: any) => {
+    const lvl = getLevelData(spell)
+    const fromLevel = Array.isArray((lvl as any)?.generate_custom_specifics) ? (lvl as any).generate_custom_specifics : []
+    const fromSpell = Array.isArray((spell as any)?.generate_custom_specifics) ? (spell as any).generate_custom_specifics : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromSpell
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      value: toNum(r?.value ?? r?.amount ?? 0),
+    })).filter((r: any) => r.value > 0 && (r.id || r.name))
+  }
+
+  const canConsumeSpecifics = (spell: any) => {
+    const requirements = getConsumeSpecifics(spell)
+    if (requirements.length === 0) return true
+    const list = Array.isArray((character as any)?.specifics) ? (character as any).specifics : []
+    return requirements.every((req: any) => {
+      const byId = req.id ? list.find((s: any) => String(s?.id) === req.id) : null
+      const byName = !byId && req.name ? list.find((s: any) => String(s?.name || '').toLowerCase() === req.name.toLowerCase()) : null
+      const item = byId || byName
+      const current = toNum(item?.current ?? 0)
+      return current >= req.value
+    })
+  }
 
   const getMaxUsesPerTurn = (spell: any): number => {
     try {
@@ -103,7 +148,7 @@ export function SpellSelectModal({ isOpen, onOpenChange, character, spellCooldow
           </div>
 
           <div className="flex-1 overflow-hidden">
-            <ScrollArea className="h-[400px] w-full">
+            <ScrollArea className="h-[60vh] md:h-[400px] w-full">
               {filteredSpells.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">Nessuna magia disponibile</div>
               ) : (
@@ -116,8 +161,10 @@ export function SpellSelectModal({ isOpen, onOpenChange, character, spellCooldow
                     const usedKey = `${String((character as any)?.id ?? '')}:spell:${sid}`
                     const used = toNum((perTurnUses as any)?.[usedKey] ?? 0)
                     const isPerTurnBlocked = limit > 0 && used >= limit
+                    const hasSpecifics = canConsumeSpecifics(spell)
+                    const isSpecificBlocked = !hasSpecifics
                     return (
-                      <Card key={sid} className={`cursor-pointer transition-all duration-200 hover:shadow-md ${selectedSpell?.id === spell.id ? 'ring-2 ring-primary bg-primary/5 shadow-md' : 'hover:bg-muted/50'}`} onClick={() => { setSelectedSpell(spell) }}>
+                      <Card key={sid} className={`transition-all duration-200 hover:shadow-md ${selectedSpell?.id === spell.id ? 'ring-2 ring-primary bg-primary/5 shadow-md' : 'hover:bg-muted/50'} ${isSpecificBlocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`} onClick={() => { if (isSpecificBlocked) return; setSelectedSpell(spell) }}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -137,9 +184,26 @@ export function SpellSelectModal({ isOpen, onOpenChange, character, spellCooldow
                                   </Badge>
                                 )}
                                 {isPerTurnBlocked && (<Badge variant="secondary" className="text-xs">limite turno</Badge>)}
+                                {isSpecificBlocked && (<Badge variant="secondary" className="text-xs">specifiche insufficienti</Badge>)}
                               </div>
                               <p className="text-sm text-muted-foreground mb-2">{spell.category || '-'}</p>
                               <p className="text-sm line-clamp-2">{spell.description || ''}</p>
+                              {(() => {
+                                const lvl: any = getLevelData(spell)
+                                const everyHp = toNum(lvl?.less_health_more_damage_every_hp ?? lvl?.lessHealthMoreDamageEveryHp ?? 0)
+                                const vals = Array.isArray(lvl?.damage_values) ? lvl.damage_values : []
+                                const inc = vals.filter((v: any) => toNum(v?.less_health_more_damage_guaranteed_increment ?? 0) > 0 || toNum(v?.less_health_more_damage_additional_increment ?? 0) > 0)
+                                if (!(everyHp > 0 && inc.length > 0)) return null
+                                return (
+                                  <div className="text-xs text-muted-foreground mt-2">
+                                    {inc.map((v: any, i: number) => (
+                                      <div key={`mh-${i}`}>
+                                        Salute mancante: {String(v?.typeName || v?.name || 'Tipo')} ogni {everyHp} HP{toNum(v?.less_health_more_damage_guaranteed_increment ?? 0) > 0 ? ` +${toNum(v.less_health_more_damage_guaranteed_increment)} garantiti` : ''}{toNum(v?.less_health_more_damage_additional_increment ?? 0) > 0 ? `${toNum(v?.less_health_more_damage_guaranteed_increment ?? 0) > 0 ? ',' : ''} +${toNum(v.less_health_more_damage_additional_increment)} addizionali` : ''}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </div>
                         </CardContent>
@@ -169,6 +233,38 @@ export function SpellSelectModal({ isOpen, onOpenChange, character, spellCooldow
                       {toNum((selectedLevelData as any)?.action_cost || (selectedLevelData as any)?.punti_azione) > 0 && (
                         <div>Punti azione: {toNum((selectedLevelData as any)?.action_cost || (selectedLevelData as any)?.punti_azione)}</div>
                       )}
+                      {(() => {
+                        const reqs = selectedSpell ? getConsumeSpecifics(selectedSpell) : []
+                        if (reqs.length === 0) return null
+                        return (
+                          <div className="pt-1">
+                            <div className="text-xs text-muted-foreground">Specifiche richieste</div>
+                            <div className="space-y-0.5">
+                              {reqs.map((r, i) => (
+                                <div key={`${String(r?.id || r?.name || i)}`}>
+                                  • {String(r?.name || r?.id || 'Specifica')}: {toNum(r?.value ?? 0)}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
+                      {(() => {
+                        const gens = selectedSpell ? getGenerateSpecifics(selectedSpell) : []
+                        if (gens.length === 0) return null
+                        return (
+                          <div className="pt-1">
+                            <div className="text-xs text-muted-foreground">Specifiche generate</div>
+                            <div className="space-y-0.5">
+                              {gens.map((r, i) => (
+                                <div key={`${String(r?.id || r?.name || i)}`}>
+                                  • {String(r?.name || r?.id || 'Specifica')}: {toNum(r?.value ?? 0)}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })()}
                       {toNum((selectedLevelData as any)?.indicative_action_cost) > 0 && (
                         <div>PA indicativi: {toNum((selectedLevelData as any)?.indicative_action_cost)}</div>
                       )}
@@ -325,9 +421,10 @@ export function SpellSelectModal({ isOpen, onOpenChange, character, spellCooldow
             const limit = selectedSpell ? getMaxUsesPerTurn(selectedSpell) : 0
             const usedKey = `${String((character as any)?.id ?? '')}:spell:${sid}`
             const used = toNum((perTurnUses as any)?.[usedKey] ?? 0)
-            const disabled = !selectedSpell || cdTurns > 0 || (limit > 0 && used >= limit)
+            const hasSpecifics = selectedSpell ? canConsumeSpecifics(selectedSpell) : true
+            const disabled = !selectedSpell || cdTurns > 0 || (limit > 0 && used >= limit) || !hasSpecifics
             return (
-              <Button onClick={() => { if (!selectedSpell || cdTurns > 0) return; if (limit > 0 && used >= limit) return; const lvl = toNum((selectedSpell as any)?.current_level || (selectedSpell as any)?.levels?.[0]?.level || 1); onConfirm?.({ spell: selectedSpell, level: lvl }); onOpenChange(false) }} disabled={disabled}>Seleziona</Button>
+              <Button onClick={() => { if (!selectedSpell || cdTurns > 0) return; if (limit > 0 && used >= limit) return; if (!hasSpecifics) return; const lvl = toNum((selectedSpell as any)?.current_level || (selectedSpell as any)?.levels?.[0]?.level || 1); onConfirm?.({ spell: selectedSpell, level: lvl }); onOpenChange(false) }} disabled={disabled}>Seleziona</Button>
             )
           })()}
         </DialogFooter>

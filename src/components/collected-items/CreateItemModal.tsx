@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCharacters } from '@/hooks/useCharacters';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { readSpecificCatalog, type CharacterSpecificCatalogItem } from '@/lib/utils';
 import { CharacterStats } from '@/types/character';
 
 interface CreateItemModalProps {
@@ -57,6 +58,7 @@ interface FormData {
   damageAffondo: number;
   potionEffect: string;
   stats: CharacterStats;
+  custom_specifics: Array<{ id: string; name: string; max: number }>;
 }
 
 const CreateItemModal = ({ isOpen, onClose, onItemCreated }: CreateItemModalProps) => {
@@ -76,6 +78,7 @@ const CreateItemModal = ({ isOpen, onClose, onItemCreated }: CreateItemModalProp
     damagePesante: 0,
     damageAffondo: 0,
     potionEffect: '',
+    custom_specifics: [],
     stats: {
       anima: 0,
       forza: 0,
@@ -86,6 +89,30 @@ const CreateItemModal = ({ isOpen, onClose, onItemCreated }: CreateItemModalProp
       resistenza: 0
     }
   });
+  const [specificCatalog, setSpecificCatalog] = useState<CharacterSpecificCatalogItem[]>(() => readSpecificCatalog());
+
+  const normalizeCustomSpecifics = (list: any[]) => {
+    const map = new Map<string, { id: string; name: string; max: number }>();
+    (Array.isArray(list) ? list : []).forEach((row: any) => {
+      const id = String(row?.id ?? '').trim();
+      const name = String(row?.name ?? '').trim();
+      const key = id || name;
+      if (!key) return;
+      const max = Number(row?.max ?? row?.value ?? 0) || 0;
+      if (max <= 0) return;
+      const prev = map.get(key);
+      map.set(key, {
+        id: id || prev?.id || '',
+        name: name || prev?.name || '',
+        max: (prev?.max ?? 0) + max,
+      });
+    });
+    return Array.from(map.values());
+  };
+
+  useEffect(() => {
+    if (isOpen) setSpecificCatalog(readSpecificCatalog());
+  }, [isOpen]);
 
   const handleInputChange = (field: keyof FormData, value: any) => {
     setFormData(prev => ({
@@ -132,6 +159,7 @@ const CreateItemModal = ({ isOpen, onClose, onItemCreated }: CreateItemModalProp
       damagePesante: 0,
       damageAffondo: 0,
       potionEffect: '',
+      custom_specifics: [],
       stats: {
         anima: 0,
         forza: 0,
@@ -186,6 +214,10 @@ const CreateItemModal = ({ isOpen, onClose, onItemCreated }: CreateItemModalProp
           resistenza: formData.stats.resistenza || 0
         }
       };
+      const cleanedCustomSpecifics = normalizeCustomSpecifics(formData.custom_specifics);
+      if (cleanedCustomSpecifics.length > 0) {
+        itemData.item_data = { ...(itemData.item_data || {}), custom_specifics: cleanedCustomSpecifics };
+      }
   
       if (formData.type === 'armatura') {
         itemData.armor = formData.armor || 0;
@@ -452,6 +484,85 @@ const CreateItemModal = ({ isOpen, onClose, onItemCreated }: CreateItemModalProp
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Imposta specifiche</Label>
+            {(() => {
+              const list: any[] = Array.isArray((formData as any).custom_specifics) ? ((formData as any).custom_specifics as any[]) : [];
+              return (
+                <div className="space-y-2">
+                  {list.length === 0 ? (
+                    <div className="text-xs text-muted-foreground">Nessuna specifica impostata.</div>
+                  ) : null}
+                  {list.map((row, idx) => (
+                    <div key={`cs-${idx}`} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                      <Select
+                        value={String(row?.id || '')}
+                        onValueChange={(val) => {
+                          const picked = specificCatalog.find((s) => String(s.id) === String(val));
+                          setFormData((prev) => {
+                            const curr = Array.isArray((prev as any).custom_specifics) ? [...((prev as any).custom_specifics as any[])] : [];
+                            curr[idx] = { ...curr[idx], id: val, name: picked?.name ?? '' };
+                            return { ...prev, custom_specifics: curr };
+                          });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={(specificCatalog || []).length === 0 ? 'Seleziona specifica' : 'Seleziona specifica'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {specificCatalog.map((spec) => (
+                            <SelectItem key={`cs-opt-${spec.id}`} value={spec.id}>
+                              {spec.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        value={Number(row?.max ?? 0)}
+                        onChange={(e) => {
+                          const v = Number(e.target.value) || 0;
+                          setFormData((prev) => {
+                            const curr = Array.isArray((prev as any).custom_specifics) ? [...((prev as any).custom_specifics as any[])] : [];
+                            curr[idx] = { ...curr[idx], max: v };
+                            return { ...prev, custom_specifics: curr };
+                          });
+                        }}
+                        min="0"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => {
+                          setFormData((prev) => {
+                            const curr = Array.isArray((prev as any).custom_specifics) ? [...((prev as any).custom_specifics as any[])] : [];
+                            curr.splice(idx, 1);
+                            return { ...prev, custom_specifics: curr };
+                          });
+                        }}
+                      >
+                        Rimuovi
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setFormData((prev) => {
+                        const curr = Array.isArray((prev as any).custom_specifics) ? [...((prev as any).custom_specifics as any[])] : [];
+                        curr.push({ id: '', name: '', max: 0 });
+                        return { ...prev, custom_specifics: curr };
+                      });
+                    }}
+                  >
+                    Aggiungi specifica
+                  </Button>
+                </div>
+              );
+            })()}
           </div>
         </form>
 

@@ -55,6 +55,56 @@ const getCombinedAnomalies = (character: any, explicitAnomalies: any[] = []) => 
   return deduped;
 };
 
+const getExtraDamageForType = (anomaliesList: any[], typeName?: string, typeId?: string) => {
+  const norm = (s: any) => String(s ?? '').trim().toLowerCase();
+  const typeNorm = norm(typeName);
+  const idNorm = norm(typeId);
+  let total = 0;
+  const details: string[] = [];
+  for (const a of anomaliesList) {
+    const enabled =
+      (a as any)?.extraDamageEnabled ??
+      (a as any)?.extra_damage_enabled ??
+      (a as any)?.stats?.extraDamageEnabled ??
+      (a as any)?.stats?.extra_damage_enabled;
+    const def =
+      (a as any)?.extraDamage ??
+      (a as any)?.extra_damage ??
+      (a as any)?.stats?.extraDamage ??
+      (a as any)?.stats?.extra_damage;
+    if (!def) continue;
+    if (enabled === false) continue;
+    const rows: any[] = Array.isArray(def?.effects)
+      ? def.effects
+      : Array.isArray((def as any)?.damageEffects)
+        ? (def as any).damageEffects
+        : Array.isArray((def as any)?.damage_effects)
+          ? (def as any).damage_effects
+          : [];
+    for (const row of rows) {
+      const rName = String(row?.damageEffectName ?? row?.damage_effect_name ?? row?.name ?? row?.effect_name ?? '').trim();
+      const rId = String(row?.damageEffectId ?? row?.damage_effect_id ?? row?.effect_id ?? '').trim();
+      const rNameNorm = norm(rName);
+      const rIdNorm = norm(rId);
+      const match =
+        (typeNorm && rNameNorm && typeNorm === rNameNorm) ||
+        (typeNorm && rIdNorm && typeNorm === rIdNorm) ||
+        (idNorm && rIdNorm && idNorm === rIdNorm) ||
+        (idNorm && rNameNorm && idNorm === rNameNorm);
+      if (!match) continue;
+      const minRaw = Number(row?.min ?? row?.minimum ?? row?.min_value ?? 0) || 0;
+      const maxRaw = Number(row?.max ?? row?.maximum ?? row?.max_value ?? 0) || 0;
+      const low = Math.max(0, Math.min(minRaw, maxRaw));
+      const high = Math.max(0, Math.max(minRaw, maxRaw));
+      if (low === 0 && high === 0) continue;
+      const roll = high === low ? high : Math.floor(Math.random() * (high - low + 1)) + low;
+      total += roll;
+      details.push(`${roll} su ${low}-${high}`);
+    }
+  }
+  return { total, details };
+};
+
 // Calcolo danno equipaggiamento - ora supporta danni normali e critici
 // Modifica la funzione per accettare il personaggio e includere l'anima
 export function calculateEquipmentDamage(
@@ -96,6 +146,12 @@ export function calculateEquipmentDamage(
       const v = typeof s?.[calcKey] === 'number' ? s[calcKey] : Number(s?.[calcKey]) || 0;
       return sum + v;
     }, 0);
+    sets.forEach((s: any) => {
+      const effName = (s?.effect_name ?? s?.effectName ?? '').toString();
+      const effId = (s?.damageEffectId ?? s?.damage_effect_id ?? s?.effect_id ?? '').toString();
+      const baseVal = Number(s?.[key] || 0) + Number(s?.[calcKey] || 0);
+      addExtraForEffect(effName, effId, baseVal);
+    });
   } else {
     // Fallback: campi diretti dell'arma
     switch (damageType) {
@@ -136,6 +192,17 @@ export function calculateEquipmentDamage(
     ...(Array.isArray(weaponAnomalies) ? weaponAnomalies : []),
     ...(Array.isArray(projectileAnomalies) ? projectileAnomalies : []),
   ]);
+  const extraDamageMap: Record<string, { total: number; details: string[] }> = {};
+  const addExtraForEffect = (name?: string, id?: string, base?: number) => {
+    const baseVal = Number(base || 0) || 0;
+    if (baseVal <= 0) return;
+    const res = getExtraDamageForType(anomaliesList, name, id);
+    if (!res.total) return;
+    const key = String(name || id || 'Generico');
+    if (!extraDamageMap[key]) extraDamageMap[key] = { total: 0, details: [] };
+    extraDamageMap[key].total += res.total;
+    if (res.details.length) extraDamageMap[key].details.push(...res.details);
+  };
   const getDamageBonusTotalsForType = (typeName?: string, typeId?: string) => {
     const typeNorm = norm(typeName);
     const idNorm = norm(typeId);
@@ -262,6 +329,8 @@ export function calculateEquipmentDamage(
       bonusCalculatedDamageClassic: 0,
       bonusCalculatedDamagePercent: 0,
       projectileDamage: 0,
+      extraDamageTotal: 0,
+      extraDamageDetails: [],
       totalPureDamage: 0,
       diceRolls: [],
       diceResult: 0,
@@ -289,6 +358,7 @@ export function calculateEquipmentDamage(
           const effectId = (s as any)?.damageEffectId ?? (s as any)?.damage_effect_id ?? '';
           const g0 = Number((s as any)?.guaranteed_damage ?? (s as any)?.guaranteedDamage ?? 0) || 0;
           const a0 = Number((s as any)?.additional_damage ?? (s as any)?.additionalDamage ?? 0) || 0;
+          addExtraForEffect(effectName, effectId, g0 + a0);
           rawProjectileGuaranteedDamage += g0;
           rawProjectileAdditionalSides += a0;
           const bonus = getDamageBonusTotalsForType(effectName, effectId);
@@ -332,10 +402,16 @@ export function calculateEquipmentDamage(
   const projectileGuaranteedDamage = Math.max(0, rawProjectileGuaranteedDamage + bonusProjectileGuaranteedDamage);
   const projectileAdditionalSides = Math.max(0, rawProjectileAdditionalSides + bonusProjectileAdditionalSides);
   const projectileDamage = projectileGuaranteedDamage;
+  const extraDamageDetails = Object.entries(extraDamageMap).map(([typeName, info]) => ({
+    typeName,
+    total: info.total,
+    details: info.details,
+  }));
+  const extraDamageTotal = extraDamageDetails.reduce((sum, row) => sum + (Number(row?.total || 0) || 0), 0);
   
   if (isCritical) {
     // Per danno critico, tutti i valori diventano puri
-    const totalPureDamage = baseDamage + projectileDamage;
+    const totalPureDamage = baseDamage + projectileDamage + extraDamageTotal;
     return {
       baseDamage,
       rawBaseDamage,
@@ -360,6 +436,8 @@ export function calculateEquipmentDamage(
       bonusProjectileAdditionalPercent,
       projectileAdditionalSides,
       totalPureDamage,
+      extraDamageTotal,
+      extraDamageDetails,
       diceRolls: [],
       guaranteedDamage: baseDamage + projectileDamage,
       maximalDamage: 0
@@ -391,7 +469,9 @@ export function calculateEquipmentDamage(
       bonusProjectileAdditionalClassic,
       bonusProjectileAdditionalPercent,
       projectileAdditionalSides,
-      totalPureDamage: guaranteedDamage + diceResult, // CORREZIONE: aggiungere il tiro di dado
+      totalPureDamage: guaranteedDamage + diceResult + extraDamageTotal,
+      extraDamageTotal,
+      extraDamageDetails,
       diceRolls: diceResult > 0 ? [{ dice: `d${baseDamage}`, result: diceResult }] : [],
       diceResult,
       guaranteedDamage,
@@ -467,6 +547,8 @@ export const calculateAbilityDamage = (
       totalDamage: 0,
       diceRolls: [],
       damageValuesAdjusted: zeroAdjustedDamageValues,
+      extraDamageTotal: 0,
+      extraDamageDetails: [],
       secondsDuration,
       projectilesCount,
       actionsCount
@@ -649,6 +731,52 @@ export const calculateAbilityDamage = (
   // Copie totali (secondi x proiettili), non moltiplica l'Anima
   const copies = Math.max(1, Number(secondsDuration)) * Math.max(1, Number(projectilesCount)) * Math.max(1, Number(actionsCount));
   
+  const extraDamageDetails: Array<{ typeName: string; total: number; details: string[] }> = [];
+  let extraDamageTotal = 0;
+  if (hasNewSchema) {
+    adjustedDamageValues.forEach((dv) => {
+      const rawBase = (Number(dv?.raw_guaranteed_damage ?? dv?.guaranteed_damage ?? 0) || 0) + (Number(dv?.raw_additional_damage ?? dv?.additional_damage ?? 0) || 0);
+      if (rawBase <= 0) return;
+      const typeName = (dv?.typeName || dv?.name || 'Generico').toString();
+      const typeId = (dv?.damageEffectId ?? dv?.damage_effect_id ?? dv?.effect_id ?? dv?.typeId ?? '').toString();
+      let total = 0;
+      const details: string[] = [];
+      for (let i = 0; i < copies; i++) {
+        const res = getExtraDamageForType(anomaliesList, typeName, typeId);
+        if (res.total > 0) {
+          total += res.total;
+          const det = res.details.join(', ');
+          if (det) details.push(copies > 1 ? `copia ${i + 1}: ${det}` : det);
+        }
+      }
+      if (total > 0) {
+        extraDamageTotal += total;
+        extraDamageDetails.push({ typeName, total, details });
+      }
+    });
+  } else {
+    const effectNames = getLegacyDamageEffectNames();
+    const names = effectNames.length > 0 ? effectNames : ['Generico'];
+    if (rawBaseSum > 0) {
+      names.forEach((name) => {
+        let total = 0;
+        const details: string[] = [];
+        for (let i = 0; i < copies; i++) {
+          const res = getExtraDamageForType(anomaliesList, name, '');
+          if (res.total > 0) {
+            total += res.total;
+            const det = res.details.join(', ');
+            if (det) details.push(copies > 1 ? `copia ${i + 1}: ${det}` : det);
+          }
+        }
+        if (total > 0) {
+          extraDamageTotal += total;
+          extraDamageDetails.push({ typeName: name, total, details });
+        }
+      });
+    }
+  }
+
   // Moltiplica il danno base per le copie (solo assicurato e aggiuntivo, non l'anima)
   const finalGuaranteedDamage = baseGuaranteedDamage * copies;
   const finalAdditionalDamage = baseAdditionalDamage * copies;
@@ -701,7 +829,7 @@ export const calculateAbilityDamage = (
     }
 
     // Per danno critico, tutti i valori diventano puri
-    const totalDamage = finalGuaranteedDamage + finalAdditionalDamage + competenceTotal + animaBonus + increasingPureTotal + scaledMovePureTotal;
+    const totalDamage = finalGuaranteedDamage + finalAdditionalDamage + competenceTotal + animaBonus + increasingPureTotal + scaledMovePureTotal + extraDamageTotal;
     return {
       guaranteedDamage: finalGuaranteedDamage,
       additionalDamage: finalAdditionalDamage,
@@ -714,6 +842,8 @@ export const calculateAbilityDamage = (
       scaledMoveInputs,
       scaledMoveCopies: copies,
       totalDamage,
+      extraDamageTotal,
+      extraDamageDetails,
       diceRolls: [], // Nessun tiro di dadi per il critico
       damageValuesAdjusted: adjustedDamageValues,
       secondsDuration,
@@ -763,7 +893,7 @@ export const calculateAbilityDamage = (
       }
     }
     
-    const totalDamage = finalGuaranteedDamage + totalAdditionalDiceResult + competenceTotal + animaBonus + increasingPureTotal + scaledMovePureTotal;
+    const totalDamage = finalGuaranteedDamage + totalAdditionalDiceResult + competenceTotal + animaBonus + increasingPureTotal + scaledMovePureTotal + extraDamageTotal;
 
     const diceRolls = [] as any[];
     if (additionalDiceResults.length > 0) {
@@ -785,6 +915,8 @@ export const calculateAbilityDamage = (
       scaledMoveInputs,
       scaledMoveCopies: copies,
       totalDamage,
+      extraDamageTotal,
+      extraDamageDetails,
       diceRolls,
       damageValuesAdjusted: adjustedDamageValues,
       secondsDuration,

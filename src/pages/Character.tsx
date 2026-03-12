@@ -572,8 +572,10 @@ const Character = () => {
   const removeEquipmentItem = (id: string) => {
     setCharacter(prev => {
       if (!prev) return prev;
+      const nextAnomalies = (prev.anomalies || []).filter(anom => !(anom.sourceType === 'equipment' && anom.sourceId === id));
       const next = applyEquipmentPowers({
         ...(prev as any),
+        anomalies: nextAnomalies,
         equipment: (prev as any).equipment.filter((eq: any) => eq.id !== id)
       } as Character);
       scheduleAutoSave(next);

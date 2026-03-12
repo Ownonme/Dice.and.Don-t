@@ -16,6 +16,13 @@ import PostureSelectionModal from '@/components/posture/PostureSelectionModal';
 import SpellSelectModal from '@/components/dice/SpellSelectModal';
 import AbilitySelectModal from '@/components/dice/AbilitySelectModal';
 
+const toNum = (v: unknown): number => {
+  if (typeof v === 'number') return v;
+  const s = String(v ?? '').trim().replace(',', '.');
+  const m = s.match(/-?\d+(?:\.\d+)?/);
+  return m ? parseFloat(m[0]) : 0;
+};
+
 const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
   isOpen,
   onClose,
@@ -45,6 +52,8 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
   // Selettore grado interno della magia (1 = base livello, >=2 = gradi aggiuntivi)
   const [selectedSpellGradeNumber, setSelectedSpellGradeNumber] = useState<number>(1);
   const [selectedAbility, setSelectedAbility] = useState<any>(null);
+  const [spellSearchQuery, setSpellSearchQuery] = useState<string>('');
+  const [abilitySearchQuery, setAbilitySearchQuery] = useState<string>('');
   // Trigger UI: scelte interattive per magie
   const [selectedDpsSeconds, setSelectedDpsSeconds] = useState<number>(0);
   const [selectedShotsCount, setSelectedShotsCount] = useState<number>(0);
@@ -328,6 +337,46 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
       phases
     };
   }, [selectedSpellGradeNumber]);
+
+  const getAbilityLevelData = React.useCallback((ability: any) => {
+    if (!ability) return null;
+    const levelNum = Number(ability?.current_level ?? ability?.level ?? ability?.levels?.[0]?.level ?? 1) || 1;
+    if (Array.isArray(ability?.levels)) {
+      return ability.levels.find((l: any) => Number(l?.level) === levelNum) || ability.levels[0] || ability;
+    }
+    return ability;
+  }, []);
+
+  const getConsumeSpecifics = React.useCallback((item: any, levelData: any) => {
+    const fromLevel = Array.isArray(levelData?.consume_custom_specifics) ? levelData.consume_custom_specifics : [];
+    const fromItem = Array.isArray(item?.consume_custom_specifics) ? item.consume_custom_specifics : [];
+    const raw = fromLevel.length > 0 ? fromLevel : fromItem;
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      value: toNum(r?.value ?? r?.amount ?? 0),
+    })).filter((r: any) => r.value > 0 && (r.id || r.name));
+  }, []);
+
+  const hasEnoughSpecifics = React.useCallback((requirements: any[]) => {
+    if (!requirements || requirements.length === 0) return true;
+    const list = Array.isArray((character as any)?.specifics) ? (character as any).specifics : [];
+    const norm = (v: any) => String(v ?? '').trim().toLowerCase();
+    return requirements.every((req: any) => {
+      const reqId = norm(req?.id ?? req?.key ?? '');
+      const reqName = norm(req?.name ?? '');
+      const item = list.find((s: any) => {
+        const itemId = norm(s?.id ?? s?.key ?? '');
+        const itemName = norm(s?.name ?? '');
+        if (reqId && itemId && reqId === itemId) return true;
+        if (reqName && itemName && reqName === itemName) return true;
+        if (reqId && !itemId && itemName && reqId === itemName) return true;
+        return false;
+      });
+      const current = toNum(item?.current ?? 0);
+      return current >= req.value;
+    });
+  }, [character]);
   const isRangedWeapon = React.useMemo(() => {
     return selectedWeapon?.subtype === 'arma_distanza' || selectedWeapon?.type === 'arma_distanza';
   }, [selectedWeapon]);
@@ -393,6 +442,21 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
   const handleActivationOnlyConfirm = () => {
     const preset = activationPreset as any;
     if (!preset?.item) return;
+    const canConsumePreset = (() => {
+      if (!character) return true;
+      if (preset.type === 'magic') {
+        const info = getSpellLevelInfo(preset.item);
+        const reqs = getConsumeSpecifics(preset.item, info?.levelData || {});
+        return hasEnoughSpecifics(reqs);
+      }
+      if (preset.type === 'ability') {
+        const lvl = getAbilityLevelData(preset.item);
+        const reqs = getConsumeSpecifics(preset.item, lvl || {});
+        return hasEnoughSpecifics(reqs);
+      }
+      return true;
+    })();
+    if (!canConsumePreset) return;
     const removedAnomalies = (() => {
       try {
         if (preset.type === 'magic') {
@@ -426,6 +490,23 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
 
   const handleConfirm = () => {
     if (selectedStat) {
+      if (compileDamage && (damageSource === 'magic' || damageSource === 'ability')) {
+        const canConsumeSelected = (() => {
+          if (!character) return true;
+          if (damageSource === 'magic' && selectedSpell) {
+            const info = getSpellLevelInfo(selectedSpell);
+            const reqs = getConsumeSpecifics(selectedSpell, info?.levelData || {});
+            return hasEnoughSpecifics(reqs);
+          }
+          if (damageSource === 'ability' && selectedAbility) {
+            const lvl = getAbilityLevelData(selectedAbility);
+            const reqs = getConsumeSpecifics(selectedAbility, lvl || {});
+            return hasEnoughSpecifics(reqs);
+          }
+          return true;
+        })();
+        if (!canConsumeSelected) return;
+      }
       const selectedCompetenceData = availableCompetences.filter(c => 
         selectedCompetences.includes(c.id)
       );
@@ -449,6 +530,12 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
 
       // Nuovo: payload multiplo per extra
       const extrasPayload = extras.filter(x => x.item).map(x => ({ type: x.type, item: x.item }));
+      const actionSource =
+        damageSource === 'magic' && selectedSpell
+          ? { type: 'magic', item: selectedSpell, gradeNumber: Number(selectedSpellGradeNumber || 1) }
+          : damageSource === 'ability' && selectedAbility
+            ? { type: 'ability', item: selectedAbility }
+            : null;
 
       const damagePayload = compileDamage ? (
         damageSource === 'equipment' && selectedWeapon
@@ -762,6 +849,7 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
         // compat: manteniamo anche il singolo target come primo della lista
         target: (targetsInfo && targetsInfo.length > 0) ? targetsInfo[0] : { type: 'none' },
         targets: targetsInfo,
+        actionSource,
         damage: {
           ...damagePayload,
           directApply: (() => {
@@ -1210,7 +1298,19 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
             })()}
             <div className="flex justify-end space-x-2">
               <Button variant="outline" onClick={onClose}>Annulla</Button>
-              <Button onClick={handleActivationOnlyConfirm} disabled={!(activationPreset as any)?.item}>Attiva</Button>
+              <Button onClick={handleActivationOnlyConfirm} disabled={!(activationPreset as any)?.item || !(() => {
+                const preset: any = activationPreset;
+                const item = preset?.item || null;
+                if (!character || !item) return true;
+                if (preset?.type === 'magic') {
+                  const info = getSpellLevelInfo(item);
+                  const reqs = getConsumeSpecifics(item, info?.levelData || {});
+                  return hasEnoughSpecifics(reqs);
+                }
+                const lvl = getAbilityLevelData(item);
+                const reqs = getConsumeSpecifics(item, lvl || {});
+                return hasEnoughSpecifics(reqs);
+              })()}>Attiva</Button>
             </div>
           </div>
         ) : (
@@ -1557,19 +1657,28 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
                   <div className="space-y-3">
                     <div>
                       <label className="text-sm font-medium">Magia</label>
-                      <div className="flex items-center gap-2">
-                        <Button variant="secondary" onClick={() => setIsSpellModalOpen(true)}>Cerca magia</Button>
-                        {(() => {
-                          const s = selectedSpell as any;
-                          if (!s) return (<span className="text-sm text-muted-foreground">Nessuna magia selezionata</span>);
-                          const levelNum = Number(s?.current_level) || Number(s?.level) || Number(s?.levels?.[0]?.level) || 1;
-                          const sid = String(s?.id ?? s?.name);
-                          const cdTurns = Number(spellCooldowns?.[sid] ?? 0) || 0;
-                          return (<span className="text-sm">{String(s.name)} • Livello {levelNum}{cdTurns > 0 ? ` • in recupero: ${cdTurns}` : ''}</span>);
-                        })()}
-                        {selectedSpell && (
-                          <Button variant="ghost" onClick={() => { setSelectedSpell(null); setSelectedSpellGradeNumber(1); }}>Rimuovi</Button>
-                        )}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            placeholder="Cerca magia..."
+                            value={spellSearchQuery}
+                            onChange={(e) => setSpellSearchQuery(e.target.value)}
+                          />
+                          <Button variant="secondary" onClick={() => setIsSpellModalOpen(true)}>Apri</Button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const s = selectedSpell as any;
+                            if (!s) return (<span className="text-sm text-muted-foreground">Nessuna magia selezionata</span>);
+                            const levelNum = Number(s?.current_level) || Number(s?.level) || Number(s?.levels?.[0]?.level) || 1;
+                            const sid = String(s?.id ?? s?.name);
+                            const cdTurns = Number(spellCooldowns?.[sid] ?? 0) || 0;
+                            return (<span className="text-sm">{String(s.name)} • Livello {levelNum}{cdTurns > 0 ? ` • in recupero: ${cdTurns}` : ''}</span>);
+                          })()}
+                          {selectedSpell && (
+                            <Button variant="ghost" onClick={() => { setSelectedSpell(null); setSelectedSpellGradeNumber(1); }}>Rimuovi</Button>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -1688,6 +1797,26 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
                                 </div>
                               </div>
                             ) : null;
+                          })()}
+
+                          {(() => {
+                            const lvl: any = info.levelData || {};
+                            const everyHp = Number(lvl?.less_health_more_damage_every_hp ?? lvl?.lessHealthMoreDamageEveryHp ?? 0) || 0;
+                            const vals = Array.isArray(lvl?.damage_values) ? lvl.damage_values : [];
+                            const inc = vals.filter((v: any) => Number(v?.less_health_more_damage_guaranteed_increment || 0) > 0 || Number(v?.less_health_more_damage_additional_increment || 0) > 0);
+                            if (!(everyHp > 0 && inc.length > 0)) return null;
+                            return (
+                              <div className="pt-1">
+                                <div className="text-xs text-muted-foreground">Salute mancante</div>
+                                <div className="space-y-1">
+                                  {inc.map((v: any, i: number) => (
+                                    <div key={`mh-${i}`}>
+                                      {String(v?.typeName || v?.name || 'Tipo')} ogni {everyHp} HP{Number(v?.less_health_more_damage_guaranteed_increment || 0) > 0 ? ` +${Number(v.less_health_more_damage_guaranteed_increment || 0)} garantiti` : ''}{Number(v?.less_health_more_damage_additional_increment || 0) > 0 ? `${Number(v?.less_health_more_damage_guaranteed_increment || 0) > 0 ? ',' : ''} +${Number(v.less_health_more_damage_additional_increment || 0)} addizionali` : ''}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
                           })()}
 
                           {(() => {
@@ -2382,17 +2511,26 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
                   <div className="space-y-3">
                     <div>
                       <label className="text-sm font-medium">Abilità</label>
-                      <div className="flex items-center gap-2">
-                        <Button variant="secondary" onClick={() => setIsAbilityModalOpen(true)}>Cerca abilità</Button>
-                        {(() => {
-                          const a = selectedAbility as any;
-                          if (!a) return (<span className="text-sm text-muted-foreground">Nessuna abilità selezionata</span>);
-                          const levelNum = Number(a?.current_level) || Number(a?.level) || Number(a?.levels?.[0]?.level) || 1;
-                          return (<span className="text-sm">{String(a.name)} • Livello {levelNum}</span>);
-                        })()}
-                        {selectedAbility && (
-                          <Button variant="ghost" onClick={() => { setSelectedAbility(null); }}>Rimuovi</Button>
-                        )}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            placeholder="Cerca abilità..."
+                            value={abilitySearchQuery}
+                            onChange={(e) => setAbilitySearchQuery(e.target.value)}
+                          />
+                          <Button variant="secondary" onClick={() => setIsAbilityModalOpen(true)}>Apri</Button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const a = selectedAbility as any;
+                            if (!a) return (<span className="text-sm text-muted-foreground">Nessuna abilità selezionata</span>);
+                            const levelNum = Number(a?.current_level) || Number(a?.level) || Number(a?.levels?.[0]?.level) || 1;
+                            return (<span className="text-sm">{String(a.name)} • Livello {levelNum}</span>);
+                          })()}
+                          {selectedAbility && (
+                            <Button variant="ghost" onClick={() => { setSelectedAbility(null); }}>Rimuovi</Button>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -2446,6 +2584,26 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
                                         </div>
                                       </>
                                     )}
+                                  </div>
+                                );
+                              })()}
+
+                              {(() => {
+                                const lvl: any = Array.isArray((selectedAbility as any)?.levels) ? (selectedAbility as any).levels[0] : (selectedAbility as any);
+                                const everyHp = Number(lvl?.less_health_more_damage_every_hp ?? lvl?.lessHealthMoreDamageEveryHp ?? 0) || 0;
+                                const vals = Array.isArray(lvl?.damage_values) ? lvl.damage_values : [];
+                                const inc = vals.filter((v: any) => Number(v?.less_health_more_damage_guaranteed_increment || 0) > 0 || Number(v?.less_health_more_damage_additional_increment || 0) > 0);
+                                if (!(everyHp > 0 && inc.length > 0)) return null;
+                                return (
+                                  <div className="pt-1">
+                                    <div className="text-xs text-muted-foreground">Salute mancante</div>
+                                    <div className="space-y-1">
+                                      {inc.map((v: any, i: number) => (
+                                        <div key={`mh-${i}`}>
+                                          {String(v?.typeName || v?.name || 'Tipo')} ogni {everyHp} HP{Number(v?.less_health_more_damage_guaranteed_increment || 0) > 0 ? ` +${Number(v.less_health_more_damage_guaranteed_increment || 0)} garantiti` : ''}{Number(v?.less_health_more_damage_additional_increment || 0) > 0 ? `${Number(v?.less_health_more_damage_guaranteed_increment || 0) > 0 ? ',' : ''} +${Number(v.less_health_more_damage_additional_increment || 0)} addizionali` : ''}
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
                                 );
                               })()}
@@ -3073,6 +3231,19 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
                 (damageSource === 'magic' && (!selectedSpell || (() => { const info = getSpellLevelInfo(selectedSpell); const lvl = info?.levelData || {}; const useW = !!(lvl?.use_weapon_damage || (selectedSpell as any)?.use_weapon_damage); return useW ? (!selectedWeapon || !weaponDamageType || (isRangedWeapon && !selectedArrow)) : false; })())) ||
                 (damageSource === 'ability' && (!selectedAbility || (() => { const lvl = Array.isArray((selectedAbility as any)?.levels) ? (selectedAbility as any).levels[0] : (selectedAbility as any); const useW = !!(lvl?.use_weapon_damage || (selectedAbility as any)?.use_weapon_damage); return useW ? (!selectedWeapon || !weaponDamageType || (isRangedWeapon && !selectedArrow)) : false; })()))
               )) ||
+              (compileDamage && (() => {
+                if (damageSource === 'magic' && selectedSpell) {
+                  const info = getSpellLevelInfo(selectedSpell);
+                  const reqs = getConsumeSpecifics(selectedSpell, info?.levelData || {});
+                  return !hasEnoughSpecifics(reqs);
+                }
+                if (damageSource === 'ability' && selectedAbility) {
+                  const lvl = getAbilityLevelData(selectedAbility);
+                  const reqs = getConsumeSpecifics(selectedAbility, lvl || {});
+                  return !hasEnoughSpecifics(reqs);
+                }
+                return false;
+              })()) ||
               (() => {
                 if (!(compileDamage && damageSource === 'magic' && selectedSpell)) return false;
                 const info = getSpellLevelInfo(selectedSpell);
@@ -3117,6 +3288,7 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
       character={character}
       spellCooldowns={spellCooldowns}
       perTurnUses={perTurnUses}
+      initialSearchTerm={spellSearchQuery}
       onConfirm={({ spell }) => {
         setSelectedSpell(spell)
         setSelectedSpellGradeNumber(1)
@@ -3128,6 +3300,7 @@ const StatSelectionDialog: React.FC<StatSelectionDialogProps> = ({
       character={character}
       spellCooldowns={spellCooldowns}
       perTurnUses={perTurnUses}
+      initialSearchTerm={abilitySearchQuery}
       onConfirm={({ ability }) => {
         setSelectedAbility(ability)
       }}

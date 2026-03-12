@@ -139,7 +139,7 @@ const EnemiesSidebar: React.FC<EnemiesSidebarProps> = ({
                           value={hpPercentage} 
                           className="h-2" 
                           style={{
-                            '--progress-background': hpPercentage > 50 ? '#22c55e' : hpPercentage > 25 ? '#eab308' : '#ef4444'
+                            '--progress-background': '#22c55e'
                           } as React.CSSProperties}
                         />
                         
@@ -152,7 +152,7 @@ const EnemiesSidebar: React.FC<EnemiesSidebarProps> = ({
                           value={armorPercentage} 
                           className="h-2" 
                           style={{
-                            '--progress-background': '#3b82f6'
+                            '--progress-background': '#6b7280'
                           } as React.CSSProperties}
                         />
                         
@@ -165,7 +165,7 @@ const EnemiesSidebar: React.FC<EnemiesSidebarProps> = ({
                           value={paPercentage} 
                           className="h-2" 
                           style={{
-                            '--progress-background': '#8b5cf6'
+                            '--progress-background': '#38bdf8'
                           } as React.CSSProperties}
                         />
 

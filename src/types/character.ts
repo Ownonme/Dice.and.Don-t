@@ -26,6 +26,23 @@ export interface CharacterCalculations {
   otherWeaponsDamage: any[];
 }
 
+export interface CharacterSpecific {
+  id: string;
+  name: string;
+  current?: number;
+  max?: number;
+  base_max?: number;
+  bonus_max?: number;
+  color?: string;
+  auto?: boolean;
+}
+
+export interface EquipmentCustomSpecific {
+  id: string;
+  name: string;
+  max: number;
+}
+
 // Tipi per gli oggetti equipaggiabili
 export interface EquipmentItem {
   id: string;
@@ -57,6 +74,7 @@ export interface EquipmentItem {
       | { spell: any; level: number }
     >;
   };
+  custom_specifics?: EquipmentCustomSpecific[];
   data?: WeaponData;
 }
 
@@ -96,6 +114,7 @@ export interface InventoryItem {
   description?: string;
   weight?: number;
   quantity?: number;
+  custom_specifics?: EquipmentCustomSpecific[];
   equipmentData?: Partial<EquipmentItem>;
 }
 
@@ -175,6 +194,16 @@ export interface StatusAnomaly {
   alwaysActive?: boolean;
   sourceType?: 'equipment' | 'spell' | 'ability' | 'manual';
   sourceId?: string;
+  sourceName?: string;
+  extraDamageEnabled?: boolean;
+  extraDamage?: {
+    effects?: Array<{
+      damageEffectId?: string;
+      damageEffectName?: string;
+      min?: number;
+      max?: number;
+    }>;
+  };
   damageSets?: { damageEffectId?: string; effectName?: string; guaranteedDamage?: number; additionalDamage?: number }[];
   damageBonusEnabled?: boolean;
   damageBonus?: {
@@ -221,6 +250,9 @@ export interface StatusAnomaly {
     percentageGuaranteed?: number;
     percentageAdditional?: number;
   };
+  immunityTotal?: boolean;
+  immunityAnomalies?: Array<{ id?: string; name?: string }>;
+  immunityDamageEffects?: Array<{ id?: string; name?: string }>;
 }
 
 // Istanza di evocazione a runtime
@@ -318,6 +350,7 @@ export interface Character {
   };
   custom_spells?: any[];
   custom_abilities?: any[];
+  specifics?: CharacterSpecific[];
   avatar_url?: string;
   user_id?: string;
   created_at?: string;

@@ -113,6 +113,56 @@ export const MagicItem = ({ spell, character, isSelected, onSelect, isAdmin, upd
     if (map[lowered]) return map[lowered]
     return lowered.replace(/\b\w/g, (c) => c.toUpperCase())
   }
+  const specLabel = (r: any): string => {
+    const name = String(r?.name ?? '').trim()
+    if (name) return name
+    const id = String(r?.id ?? r?.key ?? '').trim()
+    return id || 'Specifica'
+  }
+  const getConsumeSpecifics = (item: any, levelData: any) => {
+    const fromLevel = Array.isArray(levelData?.consume_custom_specifics) ? levelData.consume_custom_specifics : []
+    const fromItem = Array.isArray(item?.consume_custom_specifics) ? item.consume_custom_specifics : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromItem
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      value: n(r?.value ?? r?.amount ?? 0)
+    })).filter((r: any) => r.value > 0 && (r.id || r.name))
+  }
+  const getGenerateSpecifics = (item: any, levelData: any) => {
+    const fromLevel = Array.isArray(levelData?.generate_custom_specifics) ? levelData.generate_custom_specifics : []
+    const fromItem = Array.isArray(item?.generate_custom_specifics) ? item.generate_custom_specifics : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromItem
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      value: n(r?.value ?? r?.amount ?? 0)
+    })).filter((r: any) => r.value > 0 && (r.id || r.name))
+  }
+  const getPassiveCustomSpecifics = (item: any, levelData: any) => {
+    const fromLevel = Array.isArray(levelData?.passive_custom_specifics) ? levelData.passive_custom_specifics : []
+    const fromItem = Array.isArray(item?.passive_custom_specifics) ? item.passive_custom_specifics : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromItem
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      max: n(r?.max ?? r?.value ?? 0)
+    })).filter((r: any) => r.max > 0 && (r.id || r.name))
+  }
+  const getRequiredSpecifics = (item: any, levelData: any) => {
+    const fromLevel = Array.isArray(levelData?.passive_specific_conditions) ? levelData.passive_specific_conditions : []
+    const fromItem = Array.isArray(item?.passive_specific_conditions) ? item.passive_specific_conditions : []
+    const raw = fromLevel.length > 0 ? fromLevel : fromItem
+    return raw.map((r: any) => ({
+      id: String(r?.id ?? '').trim(),
+      key: String(r?.key ?? '').trim(),
+      name: String(r?.name ?? '').trim(),
+      minPercent: n(r?.min_percent ?? r?.minPercent ?? 0),
+      maxPercent: n(r?.max_percent ?? r?.maxPercent ?? 0),
+      minValue: n(r?.min_value ?? r?.minValue ?? 0),
+      maxValue: n(r?.max_value ?? r?.maxValue ?? 0),
+    })).filter((r: any) => (r.id || r.key || r.name) && (r.minPercent > 0 || r.maxPercent > 0 || r.minValue > 0 || r.maxValue > 0))
+  }
   
   const handleItemClick = () => {
     if (onSelect) {
@@ -125,56 +175,58 @@ export const MagicItem = ({ spell, character, isSelected, onSelect, isAdmin, upd
   
   return (
     <div 
-      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+      className={`flex flex-col gap-2 md:flex-row md:items-start md:justify-between p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
         isSelected 
           ? 'bg-accent/15 border-primary/60 shadow-lg shadow-primary/15 ring-2 ring-primary/30'
           : 'bg-muted/30 border-border hover:bg-muted/50'
       }`}
       onClick={handleItemClick}
     >
-      <div className="flex items-center gap-3 flex-1">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-3 flex-1">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="space-y-1 mb-1">
             <h4 className="font-medium text-sm">{spell.name}</h4>
-            {Number((spell as any)?.difficulty || 0) > 0 && (
-              <Badge variant="outline" className="text-xs bg-yellow-500 text-white border-yellow-600">
-                Diff {Number((spell as any).difficulty || 0)}
+            <div className="flex flex-wrap gap-1">
+              {Number((spell as any)?.difficulty || 0) > 0 && (
+                <Badge variant="outline" className="text-xs bg-yellow-500 text-white border-yellow-600">
+                  Diff {Number((spell as any).difficulty || 0)}
+                </Badge>
+              )}
+              <Badge className={getTypeColor(spell.type)}>
+                {spell.type}
               </Badge>
-            )}
-            <Badge className={getTypeColor(spell.type)}>
-              {spell.type}
-            </Badge>
-            {spell.current_level && (
-              <Badge variant="outline" className="text-xs">
-                Livello {spell.current_level}
-              </Badge>
-            )}
-            {isFromEquipment && equipmentSourceName && (
-              <Badge variant="secondary" className="text-xs">
-                {equipmentSourceName}
-              </Badge>
-            )}
-            {currentLevel?.evocation_enabled && (
-              <Badge
-                className={
-                  currentLevel.evocation_type === 'energy'
-                    ? 'bg-purple-600 text-white'
-                    : currentLevel.evocation_type === 'weapon'
-                    ? 'bg-gray-600 text-white'
+              {spell.current_level && (
+                <Badge variant="outline" className="text-xs">
+                  Livello {spell.current_level}
+                </Badge>
+              )}
+              {isFromEquipment && equipmentSourceName && (
+                <Badge variant="secondary" className="text-xs">
+                  {equipmentSourceName}
+                </Badge>
+              )}
+              {currentLevel?.evocation_enabled && (
+                <Badge
+                  className={
+                    currentLevel.evocation_type === 'energy'
+                      ? 'bg-purple-600 text-white'
+                      : currentLevel.evocation_type === 'weapon'
+                      ? 'bg-gray-600 text-white'
+                      : currentLevel.evocation_type === 'replica'
+                      ? 'bg-amber-700 text-white'
+                      : 'bg-gray-400 text-white'
+                  }
+                >
+                  {currentLevel.evocation_type === 'weapon'
+                    ? 'Arma'
                     : currentLevel.evocation_type === 'replica'
-                    ? 'bg-amber-700 text-white'
-                    : 'bg-gray-400 text-white'
-                }
-              >
-                {currentLevel.evocation_type === 'weapon'
-                  ? 'Arma'
-                  : currentLevel.evocation_type === 'replica'
-                  ? 'Replica'
-                  : currentLevel.evocation_type === 'energy'
-                  ? 'Energia'
-                  : '—'}
-              </Badge>
-            )}
+                    ? 'Replica'
+                    : currentLevel.evocation_type === 'energy'
+                    ? 'Energia'
+                    : '—'}
+                </Badge>
+              )}
+            </div>
           </div>
           <p className="text-xs text-muted-foreground mb-1">
             {spell.description}
@@ -199,6 +251,25 @@ export const MagicItem = ({ spell, character, isSelected, onSelect, isAdmin, upd
               )
             }
             return null
+          })()}
+
+          {(() => {
+            const everyHp = Number((currentLevel as any)?.less_health_more_damage_every_hp ?? (currentLevel as any)?.lessHealthMoreDamageEveryHp ?? 0) || 0
+            const rows = Array.isArray(currentLevel?.damage_values) ? currentLevel.damage_values : []
+            const incRows = rows.filter((d: any) => gt0(d?.less_health_more_damage_guaranteed_increment) || gt0(d?.less_health_more_damage_additional_increment))
+            if (!(everyHp > 0 && incRows.length > 0)) return null
+            return (
+              <div className="mt-1 text-xs text-muted-foreground">
+                <span className="font-medium">Salute mancante:</span>
+                <div className="ml-2">
+                  {incRows.map((d: any, i: number) => (
+                    <div key={`mh-${i}`}>
+                      • {String(d?.typeName || d?.name || 'Tipo')} ogni {everyHp} HP: {gt0(d?.less_health_more_damage_guaranteed_increment) ? `+${n(d.less_health_more_damage_guaranteed_increment)} garantiti` : ''}{gt0(d?.less_health_more_damage_additional_increment) ? `${gt0(d?.less_health_more_damage_guaranteed_increment) ? ', ' : ''}+${n(d.less_health_more_damage_additional_increment)} addizionali` : ''}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
           })()}
 
           {(() => {
@@ -395,6 +466,66 @@ export const MagicItem = ({ spell, character, isSelected, onSelect, isAdmin, upd
             ) : null
           })()}
 
+          {(() => {
+            const lvl: any = currentLevel || {}
+            const consume = getConsumeSpecifics(spell, lvl)
+            const generate = getGenerateSpecifics(spell, lvl)
+            const passiveCustom = getPassiveCustomSpecifics(spell, lvl)
+            const required = getRequiredSpecifics(spell, lvl)
+            if (consume.length === 0 && generate.length === 0 && passiveCustom.length === 0 && required.length === 0) return null
+            return (
+              <div className="text-xs text-muted-foreground mb-1 space-y-1">
+                {consume.length > 0 && (
+                  <div>
+                    <span className="font-medium">Specifiche consumate:</span>
+                    <div className="ml-2">
+                      {consume.map((r: any, i: number) => (
+                        <div key={`${r.id || r.name || i}`}>• {specLabel(r)}: {n(r.value)}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {generate.length > 0 && (
+                  <div>
+                    <span className="font-medium">Specifiche generate:</span>
+                    <div className="ml-2">
+                      {generate.map((r: any, i: number) => (
+                        <div key={`${r.id || r.name || i}`}>• {specLabel(r)}: {n(r.value)}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {passiveCustom.length > 0 && (
+                  <div>
+                    <span className="font-medium">Specifiche sbloccate:</span>
+                    <div className="ml-2">
+                      {passiveCustom.map((r: any, i: number) => (
+                        <div key={`${r.id || r.name || i}`}>• {specLabel(r)}: {n(r.max)}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {required.length > 0 && (
+                  <div>
+                    <span className="font-medium">Specifiche richieste:</span>
+                    <div className="ml-2">
+                      {required.map((r: any, i: number) => {
+                        const parts: string[] = []
+                        if (r.minPercent > 0) parts.push(`min % ${n(r.minPercent)}`)
+                        if (r.maxPercent > 0) parts.push(`max % ${n(r.maxPercent)}`)
+                        if (r.minValue > 0) parts.push(`min ${n(r.minValue)}`)
+                        if (r.maxValue > 0) parts.push(`max ${n(r.maxValue)}`)
+                        return (
+                          <div key={`${r.id || r.key || r.name || i}`}>• {specLabel(r)}{parts.length > 0 ? `: ${parts.join(', ')}` : ''}</div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
           {/* Descrizione livello corrente se presente */}
           {hasText(currentLevel?.level_description) && (
             <div className="text-xs text-muted-foreground">
@@ -410,7 +541,7 @@ export const MagicItem = ({ spell, character, isSelected, onSelect, isAdmin, upd
         </div>
       </div>
       
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap gap-2 md:ml-4 md:self-center">
         <Button
           variant="outline"
           size="sm"

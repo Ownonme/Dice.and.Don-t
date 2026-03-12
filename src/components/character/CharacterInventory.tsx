@@ -71,6 +71,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
         stats: fromMeta.stats || {
           forza: 0, percezione: 0, resistenza: 0, intelletto: 0, agilita: 0, sapienza: 0, anima: 0
         },
+        custom_specifics: (fromMeta as any).custom_specifics || [],
         unlockedPowers: (fromMeta as any).unlockedPowers,
         data: (fromMeta as any).data,
         ...(fromMeta.type === 'armatura'
@@ -135,6 +136,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
       // Descrizione ora senza dettagli aggiuntivi
       description: eq.description || '',
       quantity: 1,
+      custom_specifics: (eq as any).custom_specifics || [],
       equipmentData: {
         id: eq.id,
         name: eq.name,
@@ -152,6 +154,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
         calculatedDamageAffondo: eq.calculatedDamageAffondo,
         statusAnomalies: eq.statusAnomalies,
         unlockedPowers: (eq as any).unlockedPowers,
+        custom_specifics: (eq as any).custom_specifics || [],
         data: eq.data,
       }
     };
@@ -203,7 +206,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
       setEquipSourceInventory(null);
       if (item.statusAnomalies && item.statusAnomalies.length > 0) {
         item.statusAnomalies.forEach(a => {
-          onAddAnomaly({ ...a, sourceType: 'equipment', sourceId: item.id });
+          onAddAnomaly({ ...a, sourceType: 'equipment', sourceId: item.id, sourceName: item.name });
         });
       }
     } else if (editingEquipment) {
@@ -215,14 +218,14 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
       onUpdateEquipment(item);
       if (item.statusAnomalies && item.statusAnomalies.length > 0) {
         item.statusAnomalies.forEach(a => {
-          onAddAnomaly({ ...a, sourceType: 'equipment', sourceId: item.id });
+          onAddAnomaly({ ...a, sourceType: 'equipment', sourceId: item.id, sourceName: item.name });
         });
       }
     } else {
       onAddEquipment(item);
       if (item.statusAnomalies && item.statusAnomalies.length > 0) {
         item.statusAnomalies.forEach(a => {
-          onAddAnomaly({ ...a, sourceType: 'equipment', sourceId: item.id });
+          onAddAnomaly({ ...a, sourceType: 'equipment', sourceId: item.id, sourceName: item.name });
         });
       }
     }
@@ -295,7 +298,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
 
           {/* Equipaggiamento */}
           <TabsContent value="equipment" className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <h3 className="text-lg font-semibold">Oggetti Equipaggiati</h3>
               <Button 
                 onClick={() => {
@@ -303,6 +306,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
                   setEquipmentModalOpen(true);
                 }}
                 size="sm"
+                className="w-full md:w-auto"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Aggiungi Equipaggiamento
@@ -315,12 +319,14 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
                 <h4 className="font-medium text-sm text-muted-foreground">ARMATURE</h4>
                 <div className="space-y-2">
                   {groupedEquipment.armatura.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div key={item.id} className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between p-3 border rounded-lg">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="space-y-1">
                           <h5 className="font-semibold">{item.name}</h5>
-                          <Badge variant="outline">{getSubtypeLabel(item.subtype)}</Badge>
-                          {item.armor && <Badge variant="secondary">Armatura: +{item.armor}</Badge>}
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant="outline">{getSubtypeLabel(item.subtype)}</Badge>
+                            {item.armor && <Badge variant="secondary">Armatura: +{item.armor}</Badge>}
+                          </div>
                         </div>
                         {item.description && (
                           <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
@@ -339,7 +345,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
                           </div>
                         )}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2 md:ml-4">
                         <Button 
                           variant="outline" 
                           size="sm" 
@@ -383,11 +389,13 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
                 <h4 className="font-medium text-sm text-muted-foreground">ARMI</h4>
                 <div className="space-y-2">
                   {groupedEquipment.arma.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div key={item.id} className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between p-3 border rounded-lg">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="space-y-1">
                           <h5 className="font-semibold">{item.name}</h5>
-                          <Badge variant="outline">{getSubtypeLabel(item.subtype)}</Badge>
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant="outline">{getSubtypeLabel(item.subtype)}</Badge>
+                          </div>
                         </div>
                         {item.description && (
                           <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
@@ -459,7 +467,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
                           </div>
                         )}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2 md:ml-4">
                         <Button 
                           variant="outline" 
                           size="sm" 
@@ -507,7 +515,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
 
           {/* Inventario */}
           <TabsContent value="inventory" className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <h3 className="text-lg font-semibold">Oggetti Inventario</h3>
               <Button 
                 onClick={() => {
@@ -515,6 +523,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
                   setInventoryModalOpen(true);
                 }}
                 size="sm"
+                className="w-full md:w-auto"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Aggiungi Oggetto
@@ -523,12 +532,14 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
 
             <div className="space-y-2">
               {inventory.map((item) => (
-                <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div key={item.id} className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between p-3 border rounded-lg">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="space-y-1">
                       <h5 className="font-semibold">{item.name || 'Oggetto senza nome'}</h5>
-                      <Badge variant="outline">Oggetto</Badge>
-                      <Badge variant="secondary">Qty: {item.quantity}</Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="outline">Oggetto</Badge>
+                        <Badge variant="secondary">Qty: {item.quantity}</Badge>
+                      </div>
                     </div>
                     {item.description && (
                       <p className="text-sm text-muted-foreground mt-1">{item.description}</p>
@@ -596,7 +607,7 @@ const CharacterInventory = ({ equipment, inventory, onAddEquipment, onUpdateEqui
                       </span>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 md:ml-4">
                     <Button 
                       variant="outline" 
                       size="sm" 

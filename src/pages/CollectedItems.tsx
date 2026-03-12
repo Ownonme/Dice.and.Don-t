@@ -21,6 +21,9 @@ interface CollectedItem {
   subtype?: string;
   description?: string;
   armor?: number;
+  item_data?: {
+    custom_specifics?: Array<{ id: string; name: string; max: number }>;
+  };
   stats?: {
     anima?: number;
     forza?: number;
@@ -198,6 +201,7 @@ const CollectedItems = () => {
         description: item.description,
         weight: 0,
         stats: parseStatsCorrectly(item.stats),
+        custom_specifics: Array.isArray((item as any)?.item_data?.custom_specifics) ? (item as any).item_data.custom_specifics : [],
         ...(item.type === 'armatura' && { armor: item.armor || 0 }),
         ...(item.type === 'arma' && item.damage && {
           damageVeloce: item.damage.veloce || 10,

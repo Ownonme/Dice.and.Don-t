@@ -249,6 +249,7 @@ export default function ShopPage() {
             damage: typeof cartItem.item.damage === 'number' ? cartItem.item.damage : undefined,
             statusAnomalies: Array.isArray((equipMetaAny as any)?.statusAnomalies) ? (equipMetaAny as any).statusAnomalies : [],
             unlockedPowers: (equipMetaAny as any)?.unlockedPowers,
+            custom_specifics: Array.isArray((equipMetaAny as any)?.custom_specifics) ? (equipMetaAny as any).custom_specifics : [],
             data: itemType === 'arma' ? {
               material_id: (equipMetaAny as any)?.material_id ?? null,
               material_name: (equipMetaAny as any)?.material_name ?? null,
@@ -269,6 +270,8 @@ export default function ShopPage() {
               existingItem.equipmentData = equipmentMeta;
             } else if (!(existingItem.equipmentData as any)?.unlockedPowers && (equipmentMeta as any)?.unlockedPowers) {
               (existingItem.equipmentData as any).unlockedPowers = (equipmentMeta as any).unlockedPowers;
+            } else if ((!(existingItem.equipmentData as any)?.custom_specifics || (existingItem.equipmentData as any)?.custom_specifics?.length === 0) && (equipmentMeta as any)?.custom_specifics?.length > 0) {
+              (existingItem.equipmentData as any).custom_specifics = (equipmentMeta as any).custom_specifics;
             }
           } else {
             newInventory.push({
@@ -311,9 +314,14 @@ export default function ShopPage() {
           }
         } else {
           // Oggetti generici in inventario come oggetto, descrizione pulita
+          const itemDataAny = (cartItem.item as any)?.item_data || {};
+          const customSpecifics = Array.isArray((itemDataAny as any)?.custom_specifics) ? (itemDataAny as any).custom_specifics : [];
           const existingItem = newInventory.find(item => item.name === cartItem.item.name);
           if (existingItem) {
             existingItem.quantity = (existingItem.quantity || 0) + cartItem.quantity;
+            if ((existingItem as any).custom_specifics?.length === 0 && customSpecifics.length > 0) {
+              (existingItem as any).custom_specifics = customSpecifics;
+            }
           } else {
             newInventory.push({
               id: `${cartItem.item.id}_${Date.now()}`,
@@ -322,6 +330,7 @@ export default function ShopPage() {
               description: cartItem.item.description || '',
               weight: cartItem.item.weight || 1,
               quantity: cartItem.quantity,
+              custom_specifics: customSpecifics,
             });
           }
         }

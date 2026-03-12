@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { readSpecificCatalog, type CharacterSpecificCatalogItem } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Shield, Sword } from 'lucide-react';
 import { ARMOR_SUBTYPES, WEAPON_SUBTYPES, CharacterStats, StatusAnomaly } from '@/types/character';
@@ -41,6 +42,7 @@ type EquipmentMetaState = {
   material_id?: string | null;
   material_name?: string | null;
   weapon_subtype_detail?: string | null;
+  custom_specifics?: Array<{ id: string; name: string; max: number }>;
 };
 
 type MaterialOption = { id: string; name: string };
@@ -196,6 +198,30 @@ const CreateItemModal = ({ shopId, onClose, onItemCreated }: CreateItemModalProp
   const [powerUnlockEnabled, setPowerUnlockEnabled] = useState<boolean>(false);
   const [abilitySelectorOpen, setAbilitySelectorOpen] = useState<boolean>(false);
   const [spellSelectorOpen, setSpellSelectorOpen] = useState<boolean>(false);
+  const [specificCatalog, setSpecificCatalog] = useState<CharacterSpecificCatalogItem[]>(() => readSpecificCatalog());
+
+  const normalizeCustomSpecifics = (list: any[]) => {
+    const map = new Map<string, { id: string; name: string; max: number }>();
+    (Array.isArray(list) ? list : []).forEach((row: any) => {
+      const id = String(row?.id ?? '').trim();
+      const name = String(row?.name ?? '').trim();
+      const key = id || name;
+      if (!key) return;
+      const max = Number(row?.max ?? row?.value ?? 0) || 0;
+      if (max <= 0) return;
+      const prev = map.get(key);
+      map.set(key, {
+        id: id || prev?.id || '',
+        name: name || prev?.name || '',
+        max: (prev?.max ?? 0) + max,
+      });
+    });
+    return Array.from(map.values());
+  };
+
+  useEffect(() => {
+    setSpecificCatalog(readSpecificCatalog());
+  }, []);
 
   const setItemDataEquipmentMeta = <K extends keyof EquipmentMetaState>(key: K, value: EquipmentMetaState[K]) => {
     setEquipmentMeta(prev => ({ ...prev, [key]: value }));
@@ -428,6 +454,8 @@ const CreateItemModal = ({ shopId, onClose, onItemCreated }: CreateItemModalProp
         ...(!isAllZeroStats(formData.stats) && { stats: formData.stats })
       };
 
+      const cleanedCustomSpecifics = normalizeCustomSpecifics((equipmentMeta as any).custom_specifics);
+
       if (formData.type === 'pozione') {
         itemData.item_data = {
           ...(itemData.item_data || {}),
@@ -467,7 +495,6 @@ const CreateItemModal = ({ shopId, onClose, onItemCreated }: CreateItemModalProp
             return { name: alt.name.trim(), damage_sets: computedAltSets };
           })
           .filter((alt) => alt.name && alt.damage_sets.length > 0);
-
         itemData.item_data = {
           ...(itemData.item_data || {}),
           equipment_meta: {
@@ -482,6 +509,7 @@ const CreateItemModal = ({ shopId, onClose, onItemCreated }: CreateItemModalProp
               alternate_damages: computedAlternateDamages,
               alternate_damage: computedAlternateDamages[0],
             } : {}),
+            ...(cleanedCustomSpecifics.length > 0 ? { custom_specifics: cleanedCustomSpecifics } : {}),
             statusAnomalies: equipmentAnomaliesEnabled ? equipmentAnomalies : undefined,
             ...(powerUnlockEnabled && (formData.unlockedPowers.abilities.length > 0 || formData.unlockedPowers.spells.length > 0)
               ? { unlockedPowers: formData.unlockedPowers }
@@ -499,6 +527,11 @@ const CreateItemModal = ({ shopId, onClose, onItemCreated }: CreateItemModalProp
             affondo: affondoBase,
           };
         }
+      } else if (cleanedCustomSpecifics.length > 0) {
+        itemData.item_data = {
+          ...(itemData.item_data || {}),
+          custom_specifics: cleanedCustomSpecifics,
+        };
       }
   
       itemData.item_data = pruneEmptyFields(itemData.item_data) || undefined;
@@ -1267,6 +1300,79 @@ const CreateItemModal = ({ shopId, onClose, onItemCreated }: CreateItemModalProp
               ))}
             </div>
           </div>
+
+              {formData.type !== 'servizio' && (
+                <div className="space-y-2">
+                  <Label>Imposta specifiche</Label>
+                  {(() => {
+                    const list: any[] = Array.isArray((equipmentMeta as any).custom_specifics) ? ((equipmentMeta as any).custom_specifics as any[]) : [];
+                    return (
+                      <div className="space-y-2">
+                        {list.length === 0 ? (
+                          <div className="text-xs text-muted-foreground">Nessuna specifica impostata.</div>
+                        ) : null}
+                        {list.map((row, idx) => (
+                          <div key={`cs-${idx}`} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                            <Select
+                              value={String(row?.id || '')}
+                              onValueChange={(val) => {
+                                const picked = specificCatalog.find((s) => String(s.id) === String(val));
+                                const next = list.slice();
+                                next[idx] = { ...next[idx], id: val, name: picked?.name ?? '' };
+                                setItemDataEquipmentMeta('custom_specifics', next);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={(specificCatalog || []).length === 0 ? 'Seleziona specifica' : 'Seleziona specifica'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {specificCatalog.map((spec) => (
+                                  <SelectItem key={`cs-opt-${spec.id}`} value={spec.id}>
+                                    {spec.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              value={Number(row?.max ?? 0)}
+                              onChange={(e) => {
+                                const v = Number(e.target.value) || 0;
+                                const next = list.slice();
+                                next[idx] = { ...next[idx], max: v };
+                                setItemDataEquipmentMeta('custom_specifics', next);
+                              }}
+                              min="0"
+                            />
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              onClick={() => {
+                                const next = list.slice();
+                                next.splice(idx, 1);
+                                setItemDataEquipmentMeta('custom_specifics', next);
+                              }}
+                            >
+                              Rimuovi
+                            </Button>
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            const next = list.slice();
+                            next.push({ id: '', name: '', max: 0 });
+                            setItemDataEquipmentMeta('custom_specifics', next);
+                          }}
+                        >
+                          Aggiungi specifica
+                        </Button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
 
           {(formData.type === 'armatura' || formData.type === 'arma') && (
             <div className="space-y-2">

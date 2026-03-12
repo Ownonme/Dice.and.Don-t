@@ -149,14 +149,14 @@ export const AbilityLibrary = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="p-4">
-        <div className="container mx-auto flex items-center justify-between border-b pb-4">
-          <div className="flex items-center gap-4">
+        <div className="container mx-auto flex flex-col gap-3 border-b pb-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
             <Button variant="outline" onClick={() => navigate('/')}>← Home</Button>
             <h1 className="text-2xl font-bold">Libreria Abilità</h1>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:gap-2">
             {isAdmin && (
-              <Button onClick={handleAddAbility}>
+              <Button onClick={handleAddAbility} className="w-full md:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 Aggiungi Abilità
               </Button>

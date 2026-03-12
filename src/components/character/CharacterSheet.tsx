@@ -55,6 +55,42 @@ const prettyStatLabel = (key: string): string => {
   if (map[lowered]) return map[lowered];
   return lowered.replace(/\b\w/g, (c) => c.toUpperCase());
 };
+const specLabel = (r: any): string => {
+  const name = String(r?.name ?? '').trim();
+  if (name) return name;
+  const id = String(r?.id ?? r?.key ?? '').trim();
+  return id || 'Specifica';
+};
+const getConsumeSpecifics = (item: any, levelData: any) => {
+  const fromLevel = Array.isArray(levelData?.consume_custom_specifics) ? levelData.consume_custom_specifics : [];
+  const fromItem = Array.isArray(item?.consume_custom_specifics) ? item.consume_custom_specifics : [];
+  const raw = fromLevel.length > 0 ? fromLevel : fromItem;
+  return raw.map((r: any) => ({
+    id: String(r?.id ?? '').trim(),
+    name: String(r?.name ?? '').trim(),
+    value: n(r?.value ?? r?.amount ?? 0)
+  })).filter((r: any) => r.value > 0 && (r.id || r.name));
+};
+const getGenerateSpecifics = (item: any, levelData: any) => {
+  const fromLevel = Array.isArray(levelData?.generate_custom_specifics) ? levelData.generate_custom_specifics : [];
+  const fromItem = Array.isArray(item?.generate_custom_specifics) ? item.generate_custom_specifics : [];
+  const raw = fromLevel.length > 0 ? fromLevel : fromItem;
+  return raw.map((r: any) => ({
+    id: String(r?.id ?? '').trim(),
+    name: String(r?.name ?? '').trim(),
+    value: n(r?.value ?? r?.amount ?? 0)
+  })).filter((r: any) => r.value > 0 && (r.id || r.name));
+};
+const getPassiveCustomSpecifics = (item: any, levelData: any) => {
+  const fromLevel = Array.isArray(levelData?.passive_custom_specifics) ? levelData.passive_custom_specifics : [];
+  const fromItem = Array.isArray(item?.passive_custom_specifics) ? item.passive_custom_specifics : [];
+  const raw = fromLevel.length > 0 ? fromLevel : fromItem;
+  return raw.map((r: any) => ({
+    id: String(r?.id ?? '').trim(),
+    name: String(r?.name ?? '').trim(),
+    max: n(r?.max ?? r?.value ?? 0)
+  })).filter((r: any) => r.max > 0 && (r.id || r.name));
+};
 
 function sumAnomalyStat(anomalies: StatusAnomaly[] | undefined, key: string) {
   if (!anomalies || anomalies.length === 0) return 0
@@ -249,7 +285,12 @@ const handleAbilityClick = (ab: any) => {
                           {group}
                         </div>
                         <div className="p-3 space-y-3">
-                          {spells.map((sp: any) => (
+                          {spells.map((sp: any) => {
+                            const currentLevel = sp.levels?.find((l: any) => Number(l?.level ?? 0) === Number(sp.current_level ?? sp.level ?? 1)) || sp.levels?.[0];
+                            const consumeSpecifics = getConsumeSpecifics(sp, currentLevel || {});
+                            const generateSpecifics = getGenerateSpecifics(sp, currentLevel || {});
+                            const passiveCustomSpecifics = getPassiveCustomSpecifics(sp, currentLevel || {});
+                            return (
                             <Card
                               key={`${sp.id}-${sp.name}-${sp.level}`}
                               className="cursor-pointer hover:bg-accent transition-colors"
@@ -269,6 +310,40 @@ const handleAbilityClick = (ab: any) => {
                               <CardContent className="pt-0 space-y-2">
                               {sp.description && (
                                 <p className="text-xs text-muted-foreground">{sp.description}</p>
+                              )}
+                              {(consumeSpecifics.length > 0 || generateSpecifics.length > 0 || passiveCustomSpecifics.length > 0) && (
+                                <div className="text-xs text-muted-foreground space-y-1">
+                                  {consumeSpecifics.length > 0 && (
+                                    <div>
+                                      <span className="font-medium">Specifiche consumate:</span>
+                                      <div className="ml-2">
+                                        {consumeSpecifics.map((r: any, i: number) => (
+                                          <div key={`${r.id || r.name || i}`}>• {specLabel(r)}: {n(r.value)}</div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {generateSpecifics.length > 0 && (
+                                    <div>
+                                      <span className="font-medium">Specifiche generate:</span>
+                                      <div className="ml-2">
+                                        {generateSpecifics.map((r: any, i: number) => (
+                                          <div key={`${r.id || r.name || i}`}>• {specLabel(r)}: {n(r.value)}</div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {passiveCustomSpecifics.length > 0 && (
+                                    <div>
+                                      <span className="font-medium">Specifiche sbloccate:</span>
+                                      <div className="ml-2">
+                                        {passiveCustomSpecifics.map((r: any, i: number) => (
+                                          <div key={`${r.id || r.name || i}`}>• {specLabel(r)}: {n(r.max)}</div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                               <Accordion type="single" collapsible className="w-full">
                                 <AccordionItem value="item-1">
@@ -360,7 +435,7 @@ const handleAbilityClick = (ab: any) => {
                               </Accordion>
                             </CardContent>
                             </Card>
-                          ))}
+                          )})}
                         </div>
                       </div>
                     ))

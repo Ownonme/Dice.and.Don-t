@@ -89,6 +89,19 @@ const CharacterAnomalies = ({ anomalies, onAddAnomaly, onUpdateAnomaly, onRemove
   const resolveEffectName = (id: string) =>
     damageEffectNameById[String(id)] ?? (damageEffectsLoading ? 'Caricamento...' : 'Effetto sconosciuto');
 
+  const formatModeValue = (mode: string, classicG?: number, classicA?: number, percG?: number, percA?: number) => {
+    const out: string[] = [];
+    if (mode !== 'percentage') {
+      if (classicG) out.push(`assicurato ${classicG}`);
+      if (classicA) out.push(`aggiuntivo ${classicA}`);
+    }
+    if (mode !== 'classic') {
+      if (percG) out.push(`assicurato ${percG}%`);
+      if (percA) out.push(`aggiuntivo ${percA}%`);
+    }
+    return out.join(', ');
+  };
+
   const handleSaveAnomaly = (anomaly: StatusAnomaly) => {
     if (editingAnomaly) {
       onUpdateAnomaly(anomaly);
@@ -109,7 +122,7 @@ const CharacterAnomalies = ({ anomalies, onAddAnomaly, onUpdateAnomaly, onRemove
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <CardTitle>Anomalie di Stato</CardTitle>
         <Button 
           onClick={() => {
@@ -117,6 +130,7 @@ const CharacterAnomalies = ({ anomalies, onAddAnomaly, onUpdateAnomaly, onRemove
             setModalOpen(true);
           }}
           size="sm"
+          className="w-full md:w-auto"
         >
           <Plus className="h-4 w-4 mr-2" />
           Aggiungi Anomalia
@@ -125,11 +139,11 @@ const CharacterAnomalies = ({ anomalies, onAddAnomaly, onUpdateAnomaly, onRemove
       <CardContent>
         <div className="space-y-3">
           {anomalies.map((anomaly) => (
-            <div key={anomaly.id} className="flex items-start justify-between p-4 border rounded-lg">
+            <div key={anomaly.id} className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between p-4 border rounded-lg">
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="space-y-1">
                   <h4 className="font-semibold">{anomaly.name || 'Anomalia senza nome'}</h4>
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1">
                     {anomaly.healthModifier !== 0 && (
                       <Badge variant={anomaly.healthModifier > 0 ? 'default' : 'destructive'}>
                         Salute: {anomaly.healthModifier > 0 ? '+' : ''}{anomaly.healthModifier}
@@ -145,15 +159,71 @@ const CharacterAnomalies = ({ anomalies, onAddAnomaly, onUpdateAnomaly, onRemove
                         Armatura: {(anomaly.armorModifier || 0) > 0 ? '+' : ''}{(anomaly.armorModifier || 0)}
                       </Badge>
                     )}
+                    {anomaly.sourceType === 'equipment' && anomaly.sourceName && (
+                      <Badge variant="secondary">
+                        {anomaly.sourceName}
+                      </Badge>
+                    )}
                     {typeof anomaly.turns === 'number' && (
                       <Badge variant="outline">Turni: {anomaly.turns}</Badge>
                     )}
+                    {Object.entries(anomaly.statsModifier || {})
+                      .filter(([_, value]) => value !== 0)
+                      .map(([stat, value]) => (
+                        <Badge key={stat} variant="outline" className="text-xs">
+                          {stat}: {value > 0 ? '+' : ''}{value}
+                        </Badge>
+                      ))}
                   </div>
                 </div>
                 
                 {anomaly.description && (
                   <p className="text-sm text-muted-foreground mb-2">{anomaly.description}</p>
                 )}
+
+                {(() => {
+                  const parts: string[] = [];
+                  if (anomaly.sourceType) parts.push(`Origine: ${anomaly.sourceType}`);
+                  if (anomaly.sourceName) parts.push(`Sorgente: ${anomaly.sourceName}`);
+                  if (anomaly.alwaysActive) parts.push('Sempre attiva');
+                  if (anomaly.durationMode) parts.push(`Durata: ${anomaly.durationMode === 'actions' ? 'azioni' : 'turni'}`);
+                  if (anomaly.actionsDurationType) parts.push(`Azioni: ${anomaly.actionsDurationType === 'performed' ? 'eseguite' : 'ricevute'}`);
+                  if (anomaly.decrementOnFailure) parts.push('Scala su fallimento');
+                  return parts.length > 0 ? (
+                    <div className="text-xs text-muted-foreground mb-2">{parts.join(' • ')}</div>
+                  ) : null;
+                })()}
+
+                {(() => {
+                  const immunityTotal = !!((anomaly as any)?.immunityTotal ?? (anomaly as any)?.immunity_total ?? (anomaly as any)?.stats?.immunity_total);
+                  const immunityAnomsRaw = (anomaly as any)?.immunityAnomalies ?? (anomaly as any)?.immunity_anomalies ?? (anomaly as any)?.stats?.immunity_anomalies ?? [];
+                  const immunityEffectsRaw = (anomaly as any)?.immunityDamageEffects ?? (anomaly as any)?.immunity_damage_effects ?? (anomaly as any)?.stats?.immunity_damage_effects ?? [];
+                  const mapAnomLabel = (v: any) => {
+                    if (typeof v === 'string') return v;
+                    return String(v?.name ?? v?.id ?? '').trim();
+                  };
+                  const mapEffectLabel = (v: any) => {
+                    if (typeof v === 'string') return resolveEffectName(v);
+                    const name = String(v?.name ?? '').trim();
+                    if (name) return name;
+                    const id = String(v?.id ?? '').trim();
+                    return id ? resolveEffectName(id) : '';
+                  };
+                  const anoms = (Array.isArray(immunityAnomsRaw) ? immunityAnomsRaw : []).map(mapAnomLabel).filter(Boolean);
+                  const effects = (Array.isArray(immunityEffectsRaw) ? immunityEffectsRaw : []).map(mapEffectLabel).filter(Boolean);
+                  if (!immunityTotal && anoms.length === 0 && effects.length === 0) return null;
+                  return (
+                    <div className="text-xs text-muted-foreground mb-2 space-y-0.5">
+                      <div><span className="font-medium">Immunità:</span> {immunityTotal ? 'Totale' : 'Selettiva'}</div>
+                      {!immunityTotal && anoms.length > 0 && (
+                        <div>• Anomalie: {anoms.join(', ')}</div>
+                      )}
+                      {!immunityTotal && effects.length > 0 && (
+                        <div>• Effetti danno: {effects.join(', ')}</div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {(() => {
                   const lines = getAnomalyDamageBonusLines(anomaly, resolveEffectName);
@@ -166,24 +236,116 @@ const CharacterAnomalies = ({ anomalies, onAddAnomaly, onUpdateAnomaly, onRemove
                     </div>
                   );
                 })()}
-                
-                {/* Modificatori statistiche */}
-                <div className="flex flex-wrap gap-1">
-                  {Object.entries(anomaly.statsModifier || {})
-                    .filter(([_, value]) => value !== 0)
-                    .map(([stat, value]) => (
-                      <Badge key={stat} variant="outline" className="text-xs">
-                        {stat}: {value > 0 ? '+' : ''}{value}
-                      </Badge>
-                    ))}
-                </div>
 
+                {(() => {
+                  const enabled = !!((anomaly as any)?.extraDamageEnabled ?? (anomaly as any)?.extra_damage_enabled);
+                  const list = (anomaly as any)?.extraDamage?.effects || (anomaly as any)?.extra_damage?.effects || [];
+                  const rows = Array.isArray(list) ? list : [];
+                  if (!enabled || rows.length === 0) return null;
+                  return (
+                    <div className="text-xs text-muted-foreground mb-2">
+                      <div className="font-medium">Danni extra:</div>
+                      <div className="ml-2 space-y-0.5">
+                        {rows.map((e: any, i: number) => (
+                          <div key={`exd:${i}`}>
+                            {e?.damageEffectName || (e?.damageEffectId ? resolveEffectName(String(e.damageEffectId)) : 'Effetto')}:{' '}
+                            {Number(e?.min ?? 0) > 0 ? `min ${Number(e.min)}` : ''}{Number(e?.max ?? 0) > 0 ? `${Number(e?.min ?? 0) > 0 ? ', ' : ''}max ${Number(e.max)}` : ''}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {(() => {
+                  const rows = Array.isArray(anomaly.damageSets) ? anomaly.damageSets : [];
+                  if (rows.length === 0) return null;
+                  return (
+                    <div className="text-xs text-muted-foreground mb-2">
+                      <div className="font-medium">Danni per tipo:</div>
+                      <div className="ml-2 space-y-0.5">
+                        {rows.map((ds: any, i: number) => (
+                          <div key={`ads:${i}`}>
+                            {ds?.effectName || ds?.effect_name || (ds?.damageEffectId ? resolveEffectName(String(ds.damageEffectId)) : 'Tipo')}:
+                            {Number(ds?.guaranteedDamage || ds?.guaranteed_damage || 0) > 0 ? ` assicurato ${Number(ds.guaranteedDamage ?? ds.guaranteed_damage)}` : ''}
+                            {Number(ds?.additionalDamage || ds?.additional_damage || 0) > 0 ? `${Number(ds?.guaranteedDamage || ds?.guaranteed_damage || 0) > 0 ? ',' : ''} aggiuntivo ${Number(ds.additionalDamage ?? ds.additional_damage)}` : ''}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {(() => {
+                  const enabled = !!((anomaly as any)?.damageReductionEnabled ?? (anomaly as any)?.damage_reduction_enabled);
+                  const def = (anomaly as any)?.damageReduction ?? (anomaly as any)?.damage_reduction;
+                  if (!enabled || !def) return null;
+                  const mode = String(def?.mode || '').toLowerCase();
+                  const isSpecific = !!def?.isSpecific;
+                  const targets = (isSpecific && (def?.damageEffectNames?.length || def?.damageEffectIds?.length))
+                    ? (def?.damageEffectNames?.length ? def.damageEffectNames : def.damageEffectIds.map(resolveEffectName))
+                    : [];
+                  const values = formatModeValue(mode, def?.classicGuaranteed, def?.classicAdditional, def?.percentageGuaranteed, def?.percentageAdditional);
+                  return (
+                    <div className="text-xs text-muted-foreground mb-2">
+                      <div className="font-medium">Riduzione danni:</div>
+                      <div className="ml-2">
+                        {targets.length > 0 ? targets.map((t: string, i: number) => (
+                          <div key={`dr:${i}`}>{t}: {values || '—'}</div>
+                        )) : <div>Generale: {values || '—'}</div>}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {(() => {
+                  const enabled = !!((anomaly as any)?.weaknessEnabled ?? (anomaly as any)?.weakness_enabled);
+                  const def = (anomaly as any)?.weakness;
+                  if (!enabled || !def) return null;
+                  const mode = String(def?.mode || '').toLowerCase();
+                  const isSpecific = !!def?.isSpecific;
+                  const targets = (isSpecific && (def?.damageEffectNames?.length || def?.damageEffectIds?.length))
+                    ? (def?.damageEffectNames?.length ? def.damageEffectNames : def.damageEffectIds.map(resolveEffectName))
+                    : [];
+                  const values = formatModeValue(mode, def?.classicGuaranteed, def?.classicAdditional, def?.percentageGuaranteed, def?.percentageAdditional);
+                  return (
+                    <div className="text-xs text-muted-foreground mb-2">
+                      <div className="font-medium">Debolezza:</div>
+                      <div className="ml-2">
+                        {targets.length > 0 ? targets.map((t: string, i: number) => (
+                          <div key={`wk:${i}`}>{t}: {values || '—'}</div>
+                        )) : <div>Generale: {values || '—'}</div>}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {(() => {
+                  const enabled = !!((anomaly as any)?.paDiscountEnabled ?? (anomaly as any)?.pa_discount_enabled);
+                  const def = (anomaly as any)?.paDiscount ?? (anomaly as any)?.pa_discount;
+                  if (!enabled || !def) return null;
+                  const mode = String(def?.mode || '').toLowerCase();
+                  const values = formatModeValue(mode, def?.classicGuaranteed, def?.classicAdditional, def?.percentageGuaranteed, def?.percentageAdditional);
+                  const targetMode = String(def?.targetMode || def?.target_mode || '');
+                  const cats = Array.isArray(def?.categories) ? def.categories : [];
+                  return (
+                    <div className="text-xs text-muted-foreground mb-2">
+                      <div className="font-medium">Sconto PA:</div>
+                      <div className="ml-2">
+                        <div>Valori: {values || '—'}</div>
+                        {targetMode && <div>Target: {targetMode}</div>}
+                        {cats.length > 0 && <div>Categorie: {cats.join(', ')}</div>}
+                      </div>
+                    </div>
+                  );
+                })()}
+                
                 {typeof anomaly.turns === 'number' && (
                   <p className="text-xs text-muted-foreground mt-2">Turni rimasti: {anomaly.turns}</p>
                 )}
               </div>
-              
-              <div className="flex gap-2 ml-4">
+
+              <div className="flex flex-wrap gap-2 md:ml-4">
                 <Button 
                   variant="outline" 
                   size="sm" 

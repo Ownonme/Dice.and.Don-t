@@ -20,7 +20,7 @@ import { listDamageEffects } from '@/integrations/supabase/damageEffects';
 import { listAnomalies, getAnomalyById } from '@/integrations/supabase/anomalies';
 import { listMaterials } from '@/integrations/supabase/materials';
 import { listWeaponTypes } from '@/integrations/supabase/weaponTypes';
-import { isAllZeroStats, pruneEmptyFields } from '@/lib/utils';
+import { isAllZeroStats, pruneEmptyFields, readSpecificCatalog, type CharacterSpecificCatalogItem } from '@/lib/utils';
 
 interface EditItemModalProps {
   item: MarketItem;
@@ -106,13 +106,34 @@ export default function EditItemModal({ item, onClose, onItemUpdated }: EditItem
     weapon_type_category?: string | null;
     material_id?: string | null;
     material_name?: string | null;
+    custom_specifics?: Array<{ id: string; name: string; max: number }>;
   }>({
     weapon_type_id: equipmentMetaInit?.weapon_type_id ?? null,
     weapon_type_name: equipmentMetaInit?.weapon_type_name ?? null,
     weapon_type_category: equipmentMetaInit?.weapon_type_category ?? null,
     material_id: equipmentMetaInit?.material_id ?? null,
     material_name: equipmentMetaInit?.material_name ?? null,
+    custom_specifics: Array.isArray((equipmentMetaInit as any)?.custom_specifics) ? (equipmentMetaInit as any).custom_specifics : [],
   });
+  const [specificCatalog, setSpecificCatalog] = useState<CharacterSpecificCatalogItem[]>(() => readSpecificCatalog());
+  const normalizeCustomSpecifics = (list: any[]) => {
+    const map = new Map<string, { id: string; name: string; max: number }>();
+    (Array.isArray(list) ? list : []).forEach((row: any) => {
+      const id = String(row?.id ?? '').trim();
+      const name = String(row?.name ?? '').trim();
+      const key = id || name;
+      if (!key) return;
+      const max = Number(row?.max ?? row?.value ?? 0) || 0;
+      if (max <= 0) return;
+      const prev = map.get(key);
+      map.set(key, {
+        id: id || prev?.id || '',
+        name: name || prev?.name || '',
+        max: (prev?.max ?? 0) + max,
+      });
+    });
+    return Array.from(map.values());
+  };
   const [materials, setMaterials] = useState<any[]>([]);
   const [weaponTypes, setWeaponTypes] = useState<any[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState<boolean>(false);
@@ -163,6 +184,10 @@ export default function EditItemModal({ item, onClose, onItemUpdated }: EditItem
   useEffect(() => {
     if (!isAdmin) onClose();
   }, [isAdmin, onClose]);
+
+  useEffect(() => {
+    setSpecificCatalog(readSpecificCatalog());
+  }, []);
 
   useEffect(() => {
     if (type !== 'armatura' && type !== 'arma') {
@@ -250,6 +275,7 @@ export default function EditItemModal({ item, onClose, onItemUpdated }: EditItem
       let newItemData: any = { ...existingItemData };
       if (type !== 'pozione') delete newItemData.potion_meta;
       if (type !== 'armatura' && type !== 'arma') delete newItemData.equipment_meta;
+      const cleanedCustomSpecifics = normalizeCustomSpecifics((equipmentMeta as any).custom_specifics);
 
       if (type === 'pozione') {
         newItemData = {
@@ -290,7 +316,6 @@ export default function EditItemModal({ item, onClose, onItemUpdated }: EditItem
               .filter((ds) => String((ds as any)?.effect_name || '').trim()),
           }))
           .filter((a) => String(a?.name || '').trim() && Array.isArray(a?.damage_sets) && a.damage_sets.length > 0);
-
         newItemData = {
           ...newItemData,
           equipment_meta: {
@@ -305,6 +330,7 @@ export default function EditItemModal({ item, onClose, onItemUpdated }: EditItem
               alternate_damages: computedAlternateDamages,
               alternate_damage: computedAlternateDamages[0],
             } : {}),
+            ...(cleanedCustomSpecifics.length > 0 ? { custom_specifics: cleanedCustomSpecifics } : {}),
             statusAnomalies: equipmentAnomaliesEnabled ? equipmentAnomalies : undefined,
             ...(powerUnlockEnabled && ((unlockedPowers.abilities.length > 0) || (unlockedPowers.spells.length > 0))
               ? { unlockedPowers }
@@ -323,6 +349,8 @@ export default function EditItemModal({ item, onClose, onItemUpdated }: EditItem
             affondo: affondoBase,
           };
         }
+      } else if (cleanedCustomSpecifics.length > 0) {
+        newItemData = { ...newItemData, custom_specifics: cleanedCustomSpecifics };
       }
 
       const prunedItemData = pruneEmptyFields(newItemData);
@@ -874,6 +902,78 @@ export default function EditItemModal({ item, onClose, onItemUpdated }: EditItem
               <Input type="number" value={stats.resistenza} onChange={(e) => setStats({ ...stats, resistenza: parseInt(e.target.value) || 0 })} />
             </div>
           </div>
+          {type !== 'servizio' && (
+            <div className="space-y-2">
+              <Label>Imposta specifiche</Label>
+              {(() => {
+                const list: any[] = Array.isArray((equipmentMeta as any).custom_specifics) ? ((equipmentMeta as any).custom_specifics as any[]) : [];
+                return (
+                  <div className="space-y-2">
+                    {list.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">Nessuna specifica impostata.</div>
+                    ) : null}
+                    {list.map((row, idx) => (
+                      <div key={`cs-${idx}`} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                        <Select
+                          value={String(row?.id || '')}
+                          onValueChange={(val) => {
+                            const picked = specificCatalog.find((s) => String(s.id) === String(val));
+                            const next = list.slice();
+                            next[idx] = { ...next[idx], id: val, name: picked?.name ?? '' };
+                            setEquipmentMeta((prev) => ({ ...prev, custom_specifics: next }));
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder={(specificCatalog || []).length === 0 ? 'Seleziona specifica' : 'Seleziona specifica'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {specificCatalog.map((spec) => (
+                              <SelectItem key={`cs-opt-${spec.id}`} value={spec.id}>
+                                {spec.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          value={Number(row?.max ?? 0)}
+                          onChange={(e) => {
+                            const v = Number(e.target.value) || 0;
+                            const next = list.slice();
+                            next[idx] = { ...next[idx], max: v };
+                            setEquipmentMeta((prev) => ({ ...prev, custom_specifics: next }));
+                          }}
+                          min="0"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          onClick={() => {
+                            const next = list.slice();
+                            next.splice(idx, 1);
+                            setEquipmentMeta((prev) => ({ ...prev, custom_specifics: next }));
+                          }}
+                        >
+                          Rimuovi
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const next = list.slice();
+                        next.push({ id: '', name: '', max: 0 });
+                        setEquipmentMeta((prev) => ({ ...prev, custom_specifics: next }));
+                      }}
+                    >
+                      Aggiungi specifica
+                    </Button>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
           {(type === 'armatura' || type === 'arma') && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">

@@ -241,7 +241,7 @@ const MAGIC_CATEGORIES = {
   'Trasmutazione': ['Trasmutazione', 'Alterazione', 'Elementale'],
   'Occulto': ['Sangue', 'Ombra', 'Ossa'],
   'Arcano': ['Caotico', 'Compresso'],
-  'Speciale': ['Draconico', 'Critico', 'Altro']
+  'Speciale': ['Draconico', 'Infernale', 'Critico', 'Altro']
 };
 
 const GRADES = ['Semplice', 'Avanzata', 'Suprema'];
